@@ -1,0 +1,56 @@
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON, Enum
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from app.core.database import Base
+import enum
+
+
+class UserTier(enum.Enum):
+    FREE = "free"
+    ESSENTIAL = "essential"
+    PREMIUM = "premium"
+    PREMIUM_PLUS = "premium_plus"
+
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    
+    # Profile
+    first_name = Column(String(100))
+    last_name = Column(String(100))
+    phone = Column(String(20))
+    
+    # Subscription
+    tier = Column(Enum(UserTier), default=UserTier.FREE)
+    subscription_expires_at = Column(DateTime(timezone=True))
+    
+    # Preferences
+    home_airports = Column(JSON, default=list)  # ["CDG", "ORY"]
+    favorite_destinations = Column(JSON, default=list)
+    travel_types = Column(JSON, default=list)  # ["leisure", "business", "family"]
+    
+    # Notification preferences
+    email_notifications = Column(Boolean, default=True)
+    sms_notifications = Column(Boolean, default=False)
+    notification_frequency = Column(String(20), default="instant")  # instant, daily, weekly
+    
+    # Status
+    is_active = Column(Boolean, default=True)
+    is_verified = Column(Boolean, default=False)
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    last_login_at = Column(DateTime(timezone=True))
+    
+    # Onboarding progress
+    onboarding_step = Column(Integer, default=1)
+    onboarding_completed = Column(Boolean, default=False)
+    
+    # Relationships
+    alerts = relationship("Alert", back_populates="user")
+    alert_preferences = relationship("AlertPreference", back_populates="user", uselist=False)

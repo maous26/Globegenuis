@@ -1,0 +1,322 @@
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Plane, TrendingDown, Zap, Shield, Star } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { checkBackendHealth } from '../services/api';
+import toast from 'react-hot-toast';
+import './Landing.css';
+import DebugPanel from '../components/DebugPanel';
+
+const Landing = () => {
+  const { user } = useAuth();
+  const [apiStatus, setApiStatus] = useState('checking');
+  const [showDebug, setShowDebug] = useState(false);
+  
+  // Log for debugging and monitor component rendering
+  useEffect(() => {
+    console.log('Landing page rendered, user:', user);
+    
+    // Check if we're having any DOM-related issues
+    console.log('DOM loaded successfully:', document.readyState === 'complete');
+    
+    // Verify backend connectivity
+    checkBackendHealth()
+      .then(data => {
+        console.log('Backend health check result:', data);
+        setApiStatus('healthy');
+      })
+      .catch(error => {
+        console.error('Backend health check failed:', error);
+        setApiStatus('error');
+        toast.error('Problème de connexion avec le serveur');
+      });
+  }, [user]);
+
+  return (
+    <div className="min-h-screen bg-blue-50">
+      {/* Header */}
+      <header className="container mx-auto px-4 py-6">
+        <nav className="flex justify-between items-center">
+          <div className="flex items-center space-x-2">
+            <Plane className="h-8 w-8 text-blue-600" />
+            <span className="text-2xl font-bold text-gray-900">GlobeGenius</span>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            {user ? (
+              <Link 
+                to="/dashboard" 
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-all duration-200"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link to="/login" className="text-gray-700 hover:text-blue-600">
+                  Connexion
+                </Link>
+                <Link 
+                  to="/signup" 
+                  className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-all duration-200"
+                >
+                  Inscription
+                </Link>
+              </>
+            )}
+          </div>
+        </nav>
+      </header>
+
+      {/* Hero Section */}
+      <section className="container mx-auto px-4 py-20">
+        <div className="max-w-4xl mx-auto text-center">
+          <motion.h1 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="text-5xl md:text-6xl font-bold text-gray-900 mb-6"
+          >
+            L'IA qui détecte les 
+            <span className="text-blue-600"> erreurs de prix</span> 
+            <br />automatiquement
+          </motion.h1>
+          
+          <motion.p 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="text-xl text-gray-600 mb-8"
+          >
+            Notre algorithme analyse des milliers de vols pour vous trouver 
+            les erreurs tarifaires et les bonnes affaires avant qu'elles ne disparaissent.
+          </motion.p>
+          
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4"
+          >
+            <Link 
+              to="/signup" 
+              className="bg-blue-600 text-white px-8 py-4 rounded-lg font-bold shadow-lg hover:bg-blue-700 transition-all btn-landing"
+            >
+              Démarrer gratuitement
+            </Link>
+            <button 
+              onClick={() => {
+                const featuresSection = document.getElementById('features');
+                if (featuresSection) {
+                  featuresSection.scrollIntoView({ behavior: 'smooth' });
+                } else {
+                  console.warn("Features section not found in the DOM");
+                  window.scrollTo({
+                    top: 800, // Fallback to a reasonable position if the element isn't found
+                    behavior: 'smooth'
+                  });
+                }
+              }}
+              className="bg-white text-blue-600 border-2 border-blue-600 px-8 py-4 rounded-lg 
+                         font-semibold hover:border-blue-700 transition-colors btn-landing"
+            >
+              Comment ça marche
+            </button>
+          </motion.div>
+          
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 1, delay: 0.8 }}
+            className="mt-10 text-sm text-gray-500 flex justify-center items-center"
+          >
+            <div className="flex items-center mr-6">
+              <Zap className="h-5 w-5 text-blue-500 mr-1" />
+              <span>Rapide</span>
+            </div>
+            <div className="flex items-center mr-6">
+              <Shield className="h-5 w-5 text-blue-500 mr-1" />
+              <span>Sécurisé</span>
+            </div>
+            <div className="flex items-center">
+              <TrendingDown className="h-5 w-5 text-blue-500 mr-1" />
+              <span>Économique</span>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" className="py-16 bg-white">
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">Comment fonctionne GlobeGenius</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+            {/* Feature 1 */}
+            <div className="flex flex-col items-center">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <Zap className="h-8 w-8 text-blue-600" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">Détection d'anomalies</h3>
+              <p className="text-gray-600 text-center">
+                Notre IA analyse des milliers de prix de vols et détecte les tarifs anormalement bas.
+              </p>
+            </div>
+            
+            {/* Feature 2 */}
+            <div className="flex flex-col items-center">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <TrendingDown className="h-8 w-8 text-blue-600" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">Alertes instantanées</h3>
+              <p className="text-gray-600 text-center">
+                Recevez des notifications dès qu'une erreur de prix est détectée pour vos destinations favorites.
+              </p>
+            </div>
+            
+            {/* Feature 3 */}
+            <div className="flex flex-col items-center">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <Shield className="h-8 w-8 text-blue-600" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">Réservation sécurisée</h3>
+              <p className="text-gray-600 text-center">
+                Nous vous guidons vers les sites de réservation officiels pour une transaction 100% sécurisée.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="bg-blue-600 text-white py-20">
+        <div className="container mx-auto px-4 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold mb-6">
+            Prêt à dénicher les meilleures offres de vols ?
+          </h2>
+          <p className="text-xl mb-8 max-w-2xl mx-auto">
+            Rejoignez des milliers de voyageurs qui économisent grâce à GlobeGenius
+          </p>
+          <Link 
+            to="/signup" 
+            className="bg-white text-blue-600 px-8 py-4 rounded-lg font-bold shadow-lg hover:bg-gray-100 transition-all btn-landing"
+          >
+            Commencer maintenant
+          </Link>
+        </div>
+      </section>
+
+      {/* Testimonials Section */}
+      <section className="py-16 bg-gray-50">
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">Ce qu'en disent nos utilisateurs</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Testimonial 1 */}
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <div className="flex items-center mb-4">
+                <div className="flex text-yellow-400">
+                  <Star className="h-5 w-5 fill-current" />
+                  <Star className="h-5 w-5 fill-current" />
+                  <Star className="h-5 w-5 fill-current" />
+                  <Star className="h-5 w-5 fill-current" />
+                  <Star className="h-5 w-5 fill-current" />
+                </div>
+              </div>
+              <p className="text-gray-600 mb-4">
+                "J'ai économisé plus de 400€ sur mon vol pour New York grâce à une alerte GlobeGenius. Le service est incroyable !"
+              </p>
+              <p className="font-semibold">Sophie L.</p>
+            </div>
+            
+            {/* Testimonial 2 */}
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <div className="flex items-center mb-4">
+                <div className="flex text-yellow-400">
+                  <Star className="h-5 w-5 fill-current" />
+                  <Star className="h-5 w-5 fill-current" />
+                  <Star className="h-5 w-5 fill-current" />
+                  <Star className="h-5 w-5 fill-current" />
+                  <Star className="h-5 w-5 fill-current" />
+                </div>
+              </div>
+              <p className="text-gray-600 mb-4">
+                "L'application a trouvé un vol Paris-Tokyo à -70% du prix normal. Je n'y croyais pas jusqu'à ce que je réserve !"
+              </p>
+              <p className="font-semibold">Thomas M.</p>
+            </div>
+            
+            {/* Testimonial 3 */}
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <div className="flex items-center mb-4">
+                <div className="flex text-yellow-400">
+                  <Star className="h-5 w-5 fill-current" />
+                  <Star className="h-5 w-5 fill-current" />
+                  <Star className="h-5 w-5 fill-current" />
+                  <Star className="h-5 w-5 fill-current" />
+                  <Star className="h-5 w-5 fill-current" />
+                </div>
+              </div>
+              <p className="text-gray-600 mb-4">
+                "En tant que voyageur fréquent, GlobeGenius m'a permis d'économiser des milliers d'euros sur mes déplacements professionnels."
+              </p>
+              <p className="font-semibold">Alexandre D.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Debug Panel (only shown when activated) */}
+      <div className="container mx-auto px-4">
+        {apiStatus === 'error' && (
+          <div className="mb-4 text-center">
+            <button 
+              onClick={() => setShowDebug(!showDebug)} 
+              className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded"
+            >
+              {showDebug ? 'Hide Debug' : 'Show Debug'}
+            </button>
+          </div>
+        )}
+        
+        {showDebug && <DebugPanel />}
+      </div>
+
+      {/* Footer */}
+      <footer className="bg-gray-800 text-white py-10">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <div className="flex items-center mb-6 md:mb-0">
+              <Plane className="h-6 w-6 mr-2" />
+              <span className="text-xl font-bold">GlobeGenius</span>
+            </div>
+            
+            <div className="flex flex-col md:flex-row md:space-x-8 text-center md:text-left">
+              <Link to="/about" className="mb-2 md:mb-0 hover:text-blue-300">À propos</Link>
+              <Link to="/privacy" className="mb-2 md:mb-0 hover:text-blue-300">Confidentialité</Link>
+              <Link to="/terms" className="mb-2 md:mb-0 hover:text-blue-300">Conditions</Link>
+              <Link to="/contact" className="hover:text-blue-300">Contact</Link>
+            </div>
+          </div>
+          
+          <div className="mt-8 text-center text-gray-400 text-sm">
+            &copy; {new Date().getFullYear()} GlobeGenius. Tous droits réservés.
+            <span className="ml-2">
+              {apiStatus === 'healthy' && (
+                <span className="inline-block w-2 h-2 bg-green-500 rounded-full" title="Serveur connecté"></span>
+              )}
+              {apiStatus === 'error' && (
+                <span className="inline-block w-2 h-2 bg-red-500 rounded-full" title="Serveur déconnecté"></span>
+              )}
+              {apiStatus === 'checking' && (
+                <span className="inline-block w-2 h-2 bg-yellow-500 rounded-full animate-pulse" title="Vérification de la connexion..."></span>
+              )}
+            </span>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+export default Landing;

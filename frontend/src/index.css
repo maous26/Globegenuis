@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply text-gray-900 antialiased;
+  }
+}
+
+@layer components {
+  /* Primary button with blue color instead of primary-600 for better compatibility */
+  .btn-primary {
+    @apply bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold 
+           hover:bg-blue-700 transition-all duration-200 
+           shadow-lg hover:shadow-xl transform hover:-translate-y-0.5;
+  }
+  
+  .card {
+    @apply bg-white rounded-xl shadow-md p-6 
+           hover:shadow-lg transition-shadow duration-200;
+  }
+  
+  .deal-card {
+    @apply border-2 border-transparent hover:border-blue-400 
+           transition-all duration-300 cursor-pointer;
+  }
+  
+  .error-fare {
+    @apply border-red-500 bg-red-50;
+  }
+  
+  /* Additional utility classes */
+  .container-responsive {
+    @apply w-full mx-auto px-4 sm:px-6 lg:px-8;
+    max-width: 1280px;
+  }
+}
