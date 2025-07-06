@@ -28,25 +28,34 @@ class EmailService:
             subject = self._generate_subject(deals)
             html_content = self._render_deal_template(template_data)
             
+            # Fix for SendGrid API changes
+            from sendgrid.helpers.mail import Mail, Email, To, Content
+            
             message = Mail(
-                from_email=self.from_email,
-                to_emails=To(user.email, f"{user.first_name or 'Voyageur'}"),
+                from_email=(self.from_email.email, self.from_email.name),
+                to_emails=(user.email, f"{user.first_name or 'Voyageur'}"),
                 subject=subject,
                 html_content=html_content
             )
             
-            # Add tracking
-            message.tracking_settings = {
-                "click_tracking": {"enable": True},
-                "open_tracking": {"enable": True}
-            }
+            # Send with explicit parameters
+            import json
+            from python_http_client.client import Response
             
-            # Send
-            response = self.sg.send(message)
+            data = message.get()
+            response = self.sg.client.mail.send.post(request_body=data)
             
             logger.info(f"Alert sent to {user.email}: {response.status_code}")
             
-            return response.headers.get("X-Message-Id")
+            # Handle response correctly for both success status codes
+            if response.status_code == 202:  # SendGrid success status code
+                if hasattr(response, 'headers') and isinstance(response.headers, dict):
+                    return response.headers.get("X-Message-Id", "sent-but-no-id")
+                else:
+                    return "sent-successfully"  # Return a value to indicate success
+            else:
+                logger.error(f"SendGrid API returned non-success status code: {response.status_code}")
+                return None
             
         except Exception as e:
             logger.error(f"Error sending email to {user.email}: {e}")
@@ -111,6 +120,15 @@ class EmailService:
             savings = deal.normal_price - deal.deal_price
             total_savings += savings
             
+            # Fix for datetime timezone issue
+            import pytz
+            now = datetime.now(pytz.UTC)
+            expires_at = deal.expires_at
+            if expires_at.tzinfo is None:
+                expires_at = pytz.UTC.localize(expires_at)
+            
+            hours_diff = max(0, int((expires_at - now).total_seconds() / 3600))
+            
             deal_list.append({
                 "origin": route.origin,
                 "destination": route.destination,
@@ -119,7 +137,8 @@ class EmailService:
                 "discount_percentage": int(deal.discount_percentage),
                 "savings": savings,
                 "is_error_fare": deal.is_error_fare,
-                "expires_in_hours": int((deal.expires_at - datetime.now()).total_seconds() / 3600)
+                "expires_in_hours": hours_diff,
+                "id": deal.id
             })
         
         return {
