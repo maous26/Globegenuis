@@ -1,25 +1,19 @@
-// frontend/src/pages/Onboarding.js
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '../contexts/AuthContext';
-import { userAPI } from '../services/api';
-import toast from 'react-hot-toast';
+import React, { useState } from 'react';
 import { 
+  Plane, 
   MapPin, 
+  Heart, 
   Globe, 
+  Bell, 
   CheckCircle,
   ArrowRight,
   ArrowLeft,
+  Sparkles,
   TrendingDown,
-  Mail,
-  Plane,
-  Sparkles
+  Mail
 } from 'lucide-react';
 
 const Onboarding = () => {
-  const navigate = useNavigate();
-  const { user, updateUser } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   
@@ -56,94 +50,61 @@ const Onboarding = () => {
     { code: 'LAX', name: 'Los Angeles', emoji: '🌴' }
   ];
 
-  useEffect(() => {
-    if (user) {
-      setCurrentStep(user.onboarding_step || 1);
-      if (user.onboarding_completed) {
-        navigate('/dashboard');
-      }
-    }
-  }, [user, navigate]);
-
   const handleNext = async () => {
     setLoading(true);
     
-    try {
-      // Prepare data based on current step
-      let stepData = {};
+    // Simulate API call
+    setTimeout(() => {
+      // Validation logic
+      let isValid = true;
+      let errorMessage = '';
       
       switch (currentStep) {
         case 1:
-          // Step 1 is just welcome, no data to save
+          // Step 1 is just welcome, no validation needed
           break;
           
         case 2:
           if (!formData.firstName.trim()) {
-            toast.error('Veuillez entrer votre prénom');
-            setLoading(false);
-            return;
+            errorMessage = 'Veuillez entrer votre prénom';
+            isValid = false;
+          } else if (formData.homeAirports.length === 0) {
+            errorMessage = 'Veuillez sélectionner au moins un aéroport';
+            isValid = false;
           }
-          if (formData.homeAirports.length === 0) {
-            toast.error('Veuillez sélectionner au moins un aéroport');
-            setLoading(false);
-            return;
-          }
-          stepData = {
-            first_name: formData.firstName,
-            home_airports: formData.homeAirports
-          };
           break;
           
         case 3:
           if (formData.travelTypes.length === 0) {
-            toast.error('Veuillez sélectionner au moins un type de voyage');
-            setLoading(false);
-            return;
+            errorMessage = 'Veuillez sélectionner au moins un type de voyage';
+            isValid = false;
           }
-          stepData = {
-            travel_types: formData.travelTypes
-          };
           break;
           
         case 4:
           if (formData.favoriteDestinations.length === 0) {
-            toast.error('Veuillez sélectionner au moins une destination');
-            setLoading(false);
-            return;
+            errorMessage = 'Veuillez sélectionner au moins une destination';
+            isValid = false;
           }
-          stepData = {
-            favorite_destinations: formData.favoriteDestinations
-          };
-          break;
-          
-        case 5:
-          stepData = {
-            notification_frequency: formData.alertFrequency
-          };
-          break;
-          
-        default:
-          // For any unexpected step value
           break;
       }
       
-      // Update user onboarding progress
-      const response = await userAPI.updateOnboarding(currentStep + 1, stepData);
-      updateUser(response.data);
+      if (!isValid) {
+        alert(errorMessage);
+        setLoading(false);
+        return;
+      }
       
       if (currentStep === 5) {
         // Onboarding complete!
-        toast.success('🎉 Profil complété avec succès !');
-        navigate('/dashboard');
+        alert('🎉 Profil complété avec succès !');
+        console.log('Onboarding data:', formData);
       } else {
         setCurrentStep(currentStep + 1);
       }
-    } catch (error) {
-      console.error('Onboarding error:', error);
-      toast.error('Une erreur est survenue');
-    } finally {
+      
       setLoading(false);
-    }
+    }, 500);
   };
 
   const handleBack = () => {
@@ -179,32 +140,16 @@ const Onboarding = () => {
             <span className="text-sm text-gray-600">{Math.round((currentStep / 5) * 100)}% complété</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <motion.div 
-              className="bg-blue-600 h-2 rounded-full"
-              initial={{ width: 0 }}
-              animate={{ width: `${(currentStep / 5) * 100}%` }}
-              transition={{ duration: 0.5 }}
+            <div 
+              className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+              style={{ width: `${(currentStep / 5) * 100}%` }}
             />
           </div>
         </div>
 
         {/* Content Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl shadow-xl p-8"
-        >
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentStep}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.3 }}
-            >
-              {renderStep()}
-            </motion.div>
-          </AnimatePresence>
+        <div className="bg-white rounded-2xl shadow-xl p-8">
+          {renderStep()}
 
           {/* Navigation Buttons */}
           <div className="flex justify-between mt-8">
@@ -235,7 +180,7 @@ const Onboarding = () => {
               )}
             </button>
           </div>
-        </motion.div>
+        </div>
       </div>
     </div>
   );
@@ -244,14 +189,9 @@ const Onboarding = () => {
 // Step 1: Welcome
 const StepWelcome = () => (
   <div className="text-center">
-    <motion.div
-      initial={{ scale: 0 }}
-      animate={{ scale: 1 }}
-      transition={{ type: "spring", duration: 0.5 }}
-      className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6"
-    >
+    <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
       <Plane className="h-10 w-10 text-blue-600" />
-    </motion.div>
+    </div>
     
     <h2 className="text-3xl font-bold mb-4">Bienvenue sur GlobeGenius ! 🎉</h2>
     <p className="text-gray-600 mb-6">

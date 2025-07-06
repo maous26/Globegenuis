@@ -1,3 +1,5 @@
+# backend/app/models/user.py
+
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -50,6 +52,12 @@ class User(Base):
     # Onboarding progress
     onboarding_step = Column(Integer, default=1)
     onboarding_completed = Column(Boolean, default=False)
+    
+    # Progressive onboarding tracking
+    first_alert_sent_at = Column(DateTime(timezone=True))
+    alerts_opened_count = Column(Integer, default=0)
+    personalization_completed_at = Column(DateTime(timezone=True))
+    enrichment_completed_at = Column(DateTime(timezone=True))
     
     # Relationships
     alerts = relationship("Alert", back_populates="user")
