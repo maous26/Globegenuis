@@ -249,3 +249,97 @@ class EmailService:
         """
         
         return Template(template).render(**data)
+    
+    def send_password_reset_email(self, user: User, reset_token: str) -> Optional[str]:
+        """Send password reset email to user"""
+        try:
+            # Create reset URL
+            reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
+            
+            # Prepare email content
+            subject = "Réinitialisation de votre mot de passe - GlobeGenius"
+            html_content = self._render_reset_password_template({
+                "user_name": user.first_name or user.email.split('@')[0],
+                "reset_url": reset_url,
+                "expiry_hours": 24
+            })
+            
+            message = Mail(
+                from_email=self.from_email,
+                to_emails=To(user.email, f"{user.first_name or 'Voyageur'}"),
+                subject=subject,
+                html_content=html_content
+            )
+            
+            # Send email
+            response = self.sg.send(message)
+            
+            logger.info(f"Password reset email sent to {user.email}: {response.status_code}")
+            
+            return response.headers.get("X-Message-Id")
+            
+        except Exception as e:
+            logger.error(f"Error sending password reset email to {user.email}: {str(e)}")
+            return None
+    
+    def _render_reset_password_template(self, data: Dict[str, Any]) -> str:
+        """Render password reset email template"""
+        template = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Réinitialisation de mot de passe</title>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                .content { background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                .cta-button { display: inline-block; background: #667eea; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 20px 0; }
+                .footer { text-align: center; margin-top: 30px; color: #666; font-size: 14px; }
+                .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🔒 Réinitialisation de mot de passe</h1>
+                    <p>GlobeGenius</p>
+                </div>
+                
+                <div class="content">
+                    <p>Bonjour {{ user_name }},</p>
+                    
+                    <p>Nous avons reçu une demande de réinitialisation de mot de passe pour votre compte GlobeGenius.</p>
+                    
+                    <p>Pour réinitialiser votre mot de passe, cliquez sur le bouton ci-dessous :</p>
+                    
+                    <div style="text-align: center;">
+                        <a href="{{ reset_url }}" class="cta-button">
+                            Réinitialiser mon mot de passe
+                        </a>
+                    </div>
+                    
+                    <div class="warning">
+                        <p><strong>⚠️ Important :</strong></p>
+                        <ul>
+                            <li>Ce lien est valable pendant {{ expiry_hours }} heures seulement</li>
+                            <li>Si vous n'avez pas demandé cette réinitialisation, ignorez cet email</li>
+                            <li>Votre mot de passe actuel reste inchangé tant que vous ne créez pas un nouveau mot de passe</li>
+                        </ul>
+                    </div>
+                    
+                    <p>Si le bouton ne fonctionne pas, copiez et collez ce lien dans votre navigateur :</p>
+                    <p style="word-break: break-all; color: #667eea;">{{ reset_url }}</p>
+                </div>
+                
+                <div class="footer">
+                    <p>Vous recevez cet email car une réinitialisation de mot de passe a été demandée pour votre compte GlobeGenius.</p>
+                    <p>© 2024 GlobeGenius. Tous droits réservés.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return Template(template).render(**data)

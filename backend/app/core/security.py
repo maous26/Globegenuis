@@ -40,3 +40,47 @@ def create_access_token(
         to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
     )
     return encoded_jwt
+
+
+def create_password_reset_token(email: str) -> str:
+    """
+    Create a password reset token
+    """
+    expire = datetime.utcnow() + timedelta(hours=24)  # Token expires in 24 hours
+    to_encode = {"exp": expire, "sub": email, "type": "password_reset"}
+    encoded_jwt = jwt.encode(
+        to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
+    )
+    return encoded_jwt
+
+
+def verify_password_reset_token(token: str) -> Union[str, None]:
+    """
+    Verify a password reset token and return the email if valid
+    """
+    try:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
+        email: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        
+        if email is None or token_type != "password_reset":
+            return None
+            
+        return email
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.JWTError:
+        return None
+
+
+import secrets
+import string
+
+def generate_reset_token() -> str:
+    """
+    Generate a secure random token for password reset
+    """
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(32))

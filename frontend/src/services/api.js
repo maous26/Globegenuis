@@ -96,6 +96,14 @@ export const authAPI = {
       throw error; // Re-throw to be handled by the caller
     }
   },
+  
+  forgotPassword: (data) => api.post('/auth/forgot-password', data),
+  
+  resetPassword: (data) => api.post('/auth/reset-password', data),
+  
+  verifyResetToken: (token) => api.post('/auth/verify-reset-token', null, {
+    params: { token }
+  }),
 };
 
 // User endpoints

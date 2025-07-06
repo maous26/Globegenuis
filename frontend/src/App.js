@@ -10,6 +10,8 @@ import Landing from './pages/Landing';
 import SimpleLanding from './pages/SimpleLanding';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
 import Deals from './pages/Deals';
@@ -37,6 +39,8 @@ function App() {
             <Route path="/simple" element={<SimpleLanding />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/test" element={<TestComponent />} />
             
             {/* Protected routes */}
