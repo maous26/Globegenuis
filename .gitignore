@@ -41,6 +41,27 @@ yarn-error.log
 logs/
 *.log
 
+# Utility and test scripts
+backend/check_alerts.py
+backend/configure_sender_identity.py
+backend/create_alert.py
+backend/direct_email_test.py
+backend/direct_send_alert.py
+backend/fix_email_service.py
+backend/fix_sendgrid.py
+backend/raw_api_test.py
+backend/send_alert_env.py
+backend/send_pending_alerts_manual.py
+backend/sendgrid_diag.py
+backend/simple_test.py
+backend/smtp_test.py
+backend/test_sendgrid_methods.py
+backend/trigger_alert.py
+backend/update_email_service.py
+backend/update_sendgrid_key.py
+backend/verify_sender.py
+backend/celerybeat-schedule*
+
 # IDE files
 .idea/
 .vscode/
