@@ -110,6 +110,7 @@ export const authAPI = {
 export const userAPI = {
   me: () => api.get('/users/me'),
   updateMe: (data) => api.put('/users/me', data),
+  updateProfile: (data) => api.put('/users/me', data),
   updateOnboarding: (step, data) => 
     api.put('/users/me/onboarding', { step, data }),
   getAlertPreferences: () => api.get('/users/me/alert-preferences'),

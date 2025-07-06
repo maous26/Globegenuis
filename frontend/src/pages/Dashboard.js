@@ -13,14 +13,15 @@ import {
   Filter,
   RefreshCw,
   ChevronRight,
-  Zap
+  Zap,
+  LogOut
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { flightAPI } from '../services/api';
 import toast from 'react-hot-toast';
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -117,7 +118,7 @@ const Dashboard = () => {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                Bonjour {user?.first_name || 'Voyageur'} ! 👋
+                Bonjour {user?.first_name || user?.email?.split('@')[0] || 'Voyageur'} ! 👋
               </h1>
               <p className="text-gray-600 mt-1">
                 Voici les meilleures offres détectées pour vous aujourd'hui
@@ -132,6 +133,13 @@ const Dashboard = () => {
                 <Settings className="h-5 w-5 mr-2" />
                 Préférences
               </Link>
+              <button
+                onClick={logout}
+                className="flex items-center px-3 py-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition"
+              >
+                <LogOut className="h-5 w-5 mr-2" />
+                Déconnexion
+              </button>
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}

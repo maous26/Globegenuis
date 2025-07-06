@@ -66,9 +66,9 @@ def reset_database():
         
         # Create test routes
         test_routes = [
-            {"origin": "CDG", "destination": "JFK", "origin_city": "Paris", "destination_city": "New York"},
-            {"origin": "LHR", "destination": "LAX", "origin_city": "London", "destination_city": "Los Angeles"},
-            {"origin": "FRA", "destination": "NRT", "origin_city": "Frankfurt", "destination_city": "Tokyo"}
+            {"origin": "CDG", "destination": "JFK", "tier": 1},
+            {"origin": "LHR", "destination": "LAX", "tier": 1},
+            {"origin": "FRA", "destination": "NRT", "tier": 2}
         ]
         
         for route_data in test_routes:
