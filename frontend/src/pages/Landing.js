@@ -2,12 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
-  Plane, TrendingDown, Zap, Shield, Star, Users, Globe, 
+  Plane, Zap, Star, Users, Globe, 
   CheckCircle, ArrowRight, Bell, Euro, Percent, Clock
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { checkBackendHealth } from '../services/api';
-import toast from 'react-hot-toast';
 
 const Landing = () => {
   const { user } = useAuth();
@@ -62,8 +61,12 @@ const Landing = () => {
                 </Link>
               ) : (
                 <>
-                  <Link to="/login" className="text-gray-700 hover:text-blue-600 font-medium">
-                    Connexion
+                  <Link 
+                    to="/login" 
+                    className="text-blue-600 hover:text-blue-800 font-semibold 
+                             px-4 py-2 rounded-lg hover:bg-blue-50 transition-all"
+                  >
+                    Se connecter
                   </Link>
                   <Link 
                     to="/signup" 
@@ -139,15 +142,32 @@ const Landing = () => {
                 <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Link>
               
+              <Link 
+                to="/login"
+                className="px-8 py-4 bg-white text-blue-600 border-2 border-blue-600 
+                         rounded-full font-semibold hover:bg-blue-50 transition-all 
+                         flex items-center"
+              >
+                Déjà client ? Se connecter
+              </Link>
+            </motion.div>
+
+            {/* Demo button moved below */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+              className="mt-4"
+            >
               <button 
                 onClick={() => {
                   const demoSection = document.getElementById('how-it-works');
                   demoSection?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="px-8 py-4 bg-white text-gray-800 border-2 border-gray-200 
-                         rounded-full font-semibold hover:border-gray-300 transition-all"
+                className="text-gray-600 hover:text-blue-600 font-medium underline 
+                         decoration-dotted underline-offset-4 transition-colors"
               >
-                Voir une démo
+                Voir une démo →
               </button>
             </motion.div>
 
@@ -440,7 +460,7 @@ const Landing = () => {
                 </li>
                 <li className="flex items-center">
                   <CheckCircle className="w-5 h-5 text-green-500 mr-2 flex-shrink-0" />
-                  <span>Deals > -50% uniquement</span>
+                  <span>Deals &gt; -50% uniquement</span>
                 </li>
                 <li className="flex items-center text-gray-400">
                   <CheckCircle className="w-5 h-5 mr-2 flex-shrink-0" />
@@ -515,29 +535,37 @@ const Landing = () => {
       </section>
 
       {/* Final CTA */}
-      <section className="py-20 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+      <section className="py-20 bg-gradient-to-r from-indigo-600 to-purple-600">
         <div className="container mx-auto px-4 text-center">
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">
-            Prêt à économiser sur vos prochains voyages ?
-          </h2>
-          <p className="text-xl mb-8 max-w-2xl mx-auto opacity-90">
-            Rejoignez +10 000 voyageurs malins et ne ratez plus jamais une bonne affaire
-          </p>
-          <div className="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4">
-            <Link 
-              to="/signup" 
-              className="group px-8 py-4 bg-white text-blue-600 rounded-full font-bold text-lg 
-                       shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-200 
-                       flex items-center"
-            >
-              Démarrer l'essai gratuit
-              <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </Link>
-            <div className="text-white/80">
-              <CheckCircle className="w-5 h-5 inline mr-2" />
-              Sans carte bancaire • Annulation à tout moment
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+          >
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+              Prêt à économiser sur vos prochains voyages ?
+            </h2>
+            <p className="text-xl text-indigo-100 mb-10 max-w-2xl mx-auto">
+              Rejoignez des milliers de voyageurs qui économisent déjà grâce à notre IA
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <Link 
+                to="/signup"
+                className="bg-white text-indigo-600 px-8 py-4 rounded-lg font-bold text-lg hover:bg-gray-100 transition shadow-lg"
+              >
+                Commencer gratuitement
+              </Link>
+              <Link 
+                to="/login"
+                className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-lg font-bold text-lg hover:bg-white hover:text-indigo-600 transition"
+              >
+                Déjà client ? Se connecter
+              </Link>
             </div>
-          </div>
+            <p className="text-indigo-200 mt-4 text-sm">
+              ✓ Essai gratuit • ✓ Sans engagement • ✓ Résiliation à tout moment
+            </p>
+          </motion.div>
         </div>
       </section>
 
