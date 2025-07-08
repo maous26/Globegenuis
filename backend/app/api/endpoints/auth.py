@@ -1,6 +1,6 @@
-from datetime import timedelta, datetime, datetime
+from datetime import timedelta, datetime
 from typing import Any
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app import models, schemas
@@ -8,6 +8,7 @@ from app.core import security
 from app.core.config import settings
 from app.core.database import get_db
 from app.services.google_auth import GoogleAuthService
+from app.utils.logger import logger
 
 router = APIRouter()
 
@@ -96,41 +97,76 @@ async def google_callback(
 
 @router.post("/login", response_model=schemas.Token)
 def login(
-    db: Session = Depends(get_db),
-    form_data: OAuth2PasswordRequestForm = Depends()
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
 ) -> Any:
-    """OAuth2 compatible token login"""
-    user = db.query(models.User).filter(
-        models.User.email == form_data.username
-    ).first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=400,
-            detail="Incorrect email or password"
-        )
-    
-    password_valid = security.verify_password(form_data.password, user.hashed_password)
-    
-    if not password_valid:
-        raise HTTPException(
-            status_code=400,
-            detail="Incorrect email or password"
-        )
+    """OAuth2 compatible token login, get an access token for future requests"""
+    try:
+        # Find user by email (username field in OAuth2 form)
+        user = db.query(models.User).filter(
+            models.User.email == form_data.username
+        ).first()
         
-    if not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+        if not user:
+            logger.warning(f"Login attempt for non-existent user: {form_data.username}")
+            raise HTTPException(
+                status_code=400,
+                detail="Incorrect email or password"
+            )
         
-    access_token_expires = timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-    
-    return {
-        "access_token": security.create_access_token(
+        if not user.is_active:
+            logger.warning(f"Login attempt for inactive user: {form_data.username}")
+            raise HTTPException(
+                status_code=400,
+                detail="Inactive user"
+            )
+        
+        # Verify password
+        if not security.verify_password(form_data.password, user.hashed_password):
+            logger.warning(f"Invalid password attempt for user: {form_data.username}")
+            raise HTTPException(
+                status_code=400,
+                detail="Incorrect email or password"
+            )
+        
+        # Update last login
+        user.last_login_at = datetime.utcnow()
+        db.commit()
+        
+        # Create access token
+        access_token_expires = timedelta(minutes=60 * 24 * 7)  # 7 days
+        access_token = security.create_access_token(
             user.email, expires_delta=access_token_expires
-        ),
-        "token_type": "bearer",
-    }
+        )
+        
+        logger.info(f"Successful login for user: {user.email}")
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": 60 * 24 * 7 * 60,  # 7 days in seconds
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "profile_picture": user.profile_picture,
+                "tier": user.tier.value if user.tier else "free",
+                "is_admin": user.is_admin,
+                "is_superadmin": user.is_superadmin,
+                "is_verified": user.is_verified,
+                "onboarding_completed": user.onboarding_completed
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error during login"
+        )
 
 
 @router.post("/forgot-password", response_model=schemas.PasswordResetResponse)

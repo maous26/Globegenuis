@@ -196,24 +196,24 @@ class AdminService:
         
         cutoff_date = datetime.now() - timedelta(days=days)
         
-        # Daily user registrations
+        # Daily user registrations (SQLite compatible)
         daily_registrations = self.db.query(
-            func.date(User.created_at).label('date'),
+            func.strftime('%Y-%m-%d', User.created_at).label('date'),
             func.count(User.id).label('count')
         ).filter(
             User.created_at >= cutoff_date
         ).group_by(
-            func.date(User.created_at)
+            func.strftime('%Y-%m-%d', User.created_at)
         ).order_by('date').all()
         
-        # User engagement metrics
+        # User engagement metrics (SQLite compatible)
         active_users_data = self.db.query(
-            func.date(User.last_login_at).label('date'),
+            func.strftime('%Y-%m-%d', User.last_login_at).label('date'),
             func.count(User.id).label('active_count')
         ).filter(
             User.last_login_at >= cutoff_date
         ).group_by(
-            func.date(User.last_login_at)
+            func.strftime('%Y-%m-%d', User.last_login_at)
         ).order_by('date').all()
         
         # Alert engagement
@@ -225,11 +225,11 @@ class AdminService:
         
         return {
             'daily_registrations': [
-                {'date': reg.date.isoformat(), 'count': reg.count}
+                {'date': reg.date, 'count': reg.count}  # Already in ISO format from strftime
                 for reg in daily_registrations
             ],
             'daily_active_users': [
-                {'date': active.date.isoformat(), 'count': active.active_count}
+                {'date': active.date, 'count': active.active_count}  # Already in ISO format from strftime
                 for active in active_users_data
             ],
             'engagement_by_tier': [

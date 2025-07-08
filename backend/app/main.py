@@ -20,20 +20,26 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",  # Default React dev server
-        "http://localhost:3001",  # Custom port React dev server  
+        "http://localhost:3001",  # Current React dev server
         "http://localhost:3003",  # Custom port React dev server
         "http://localhost:3004",  # Alternate port React dev server
         "http://localhost:3005",  # Alternate port React dev server
-        "http://127.0.0.1:3000",  # Alternative address
         "http://127.0.0.1:3001",  # Alternative address
         "http://127.0.0.1:3003",  # Alternative address
         "http://127.0.0.1:3004",  # Alternative address
         "http://127.0.0.1:3005",  # Alternative address
-        "null",  # For file:// protocol requests
     ],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=[
+        "Content-Type", 
+        "Authorization", 
+        "Accept", 
+        "Origin", 
+        "X-Requested-With",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers"
+    ],
     expose_headers=["Content-Length"],
     max_age=600,  # Cache preflight requests for 10 minutes
 )

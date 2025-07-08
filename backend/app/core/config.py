@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = config("APP_VERSION", default="1.0.0")
     ENVIRONMENT: str = config("ENVIRONMENT", default="development")
     DEBUG: bool = config("DEBUG", default=True, cast=bool)
+    API_V1_STR: str = "/api/v1"
     
     # Database
     DATABASE_URL: str = config("DATABASE_URL")

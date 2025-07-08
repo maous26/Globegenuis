@@ -3,18 +3,22 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
-from app import models, schemas
-from app.core import security
+
 from app.core.config import settings
 from app.core.database import get_db
+from app.models.user import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+# OAuth2 scheme
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.API_V1_STR}/auth/login"
+)
 
 
 def get_current_user(
     db: Session = Depends(get_db),
     token: str = Depends(oauth2_scheme)
-) -> models.User:
+) -> User:
+    """Get current user from JWT token"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -28,45 +32,41 @@ def get_current_user(
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
-        token_data = schemas.TokenData(email=email)
     except JWTError:
         raise credentials_exception
-        
-    user = db.query(models.User).filter(
-        models.User.email == token_data.email
-    ).first()
     
+    user = db.query(User).filter(User.email == email).first()
     if user is None:
         raise credentials_exception
-        
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Inactive user"
+        )
+    
     return user
 
 
 def get_current_active_user(
-    current_user: models.User = Depends(get_current_user),
-) -> models.User:
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """Get current active user"""
     if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
-
-
-def get_current_admin_user(
-    current_user: models.User = Depends(get_current_active_user),
-) -> models.User:
-    if not current_user.is_admin and not current_user.is_superadmin:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
+            status_code=400, 
+            detail="Inactive user"
         )
     return current_user
 
 
-def get_current_superadmin_user(
-    current_user: models.User = Depends(get_current_active_user),
-) -> models.User:
-    if not current_user.is_superadmin:
+def get_current_admin_user(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """Get current admin user"""
+    if not current_user.is_admin and not current_user.is_superadmin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Superadmin access required"
+            detail="Not enough permissions"
         )
     return current_user

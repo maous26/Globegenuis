@@ -90,34 +90,102 @@ const AdminDashboard = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
+      console.log('AdminDashboard: Loading dashboard data...');
       
-      // Load all dashboard data in parallel using AdminApiService
-      const [
-        stats,
-        routes,
-        seasonal,
-        analytics,
-        health,
-        monitoring
-      ] = await Promise.all([
-        adminApi.getDashboardStats(),
-        adminApi.getRoutePerformance(30),
-        adminApi.getSeasonalVisualization(),
-        adminApi.getUserAnalytics(30),
-        adminApi.getSystemHealth(),
-        adminApi.getScannerMonitoring(24)
+      // Load all dashboard data with individual error handling
+      const dataPromises = {
+        stats: adminApi.getDashboardStats().catch(error => {
+          console.error('Error loading stats:', error);
+          return {
+            users: { total: 0, active: 0, new_today: 0 },
+            routes: { total: 0, active: 0 },
+            deals: { total: 0, active: 0 },
+            alerts: { total: 0, sent_today: 0 }
+          };
+        }),
+        routes: adminApi.getRoutePerformance(30).catch(error => {
+          console.error('Error loading route performance:', error);
+          return [];
+        }),
+        seasonal: adminApi.getSeasonalVisualization().catch(error => {
+          console.error('Error loading seasonal data:', error);
+          return {
+            current_month: new Date().toLocaleString('default', { month: 'long' }),
+            active_seasonal_routes: [],
+            optimization_recommendations: []
+          };
+        }),
+        analytics: adminApi.getUserAnalytics(30).catch(error => {
+          console.error('Error loading user analytics:', error);
+          return {
+            total_users: 0,
+            active_users: 0,
+            new_users_period: 0,
+            growth_rate: 0,
+            user_distribution: {},
+            engagement_metrics: {},
+            geographic_distribution: {},
+            registration_trends: []
+          };
+        }),
+        health: adminApi.getSystemHealth().catch(error => {
+          console.error('Error loading system health:', error);
+          return {
+            status: 'unknown',
+            uptime: 'N/A',
+            recent_scans: 0,
+            recent_deals: 0,
+            alerts: []
+          };
+        }),
+        monitoring: adminApi.getScannerMonitoring(24).catch(error => {
+          console.error('Error loading monitoring data:', error);
+          return {
+            api_quota: { used_today: 0, daily_limit: 333, usage_percentage: 0 },
+            hourly_scans: [],
+            hourly_deals: []
+          };
+        })
+      };
+
+      // Wait for all requests to complete
+      const results = await Promise.allSettled([
+        dataPromises.stats,
+        dataPromises.routes,
+        dataPromises.seasonal,
+        dataPromises.analytics,
+        dataPromises.health,
+        dataPromises.monitoring
       ]);
 
-      setDashboardData(stats);
-      setRoutePerformance(routes);
-      setSeasonalData(seasonal);
-      setUserAnalytics(analytics);
-      setSystemHealth(health);
-      setMonitoringData(monitoring);
+      // Assign results with fallbacks
+      const [statsResult, routesResult, seasonalResult, analyticsResult, healthResult, monitoringResult] = results;
+
+      setDashboardData(statsResult.status === 'fulfilled' ? statsResult.value : dataPromises.stats);
+      setRoutePerformance(routesResult.status === 'fulfilled' ? routesResult.value : []);
+      setSeasonalData(seasonalResult.status === 'fulfilled' ? seasonalResult.value : dataPromises.seasonal);
+      setUserAnalytics(analyticsResult.status === 'fulfilled' ? analyticsResult.value : dataPromises.analytics);
+      setSystemHealth(healthResult.status === 'fulfilled' ? healthResult.value : dataPromises.health);
+      setMonitoringData(monitoringResult.status === 'fulfilled' ? monitoringResult.value : dataPromises.monitoring);
+
+      console.log('AdminDashboard: All data loaded successfully');
 
     } catch (error) {
       console.error('Error loading dashboard data:', error);
-      toast.error('Failed to load dashboard data');
+      toast.error('Some dashboard data could not be loaded. Using fallback data.');
+      
+      // Set minimal fallback data to prevent complete failure
+      setDashboardData({
+        users: { total: 0, active: 0, new_today: 0 },
+        routes: { total: 0, active: 0 },
+        deals: { total: 0, active: 0 },
+        alerts: { total: 0, sent_today: 0 }
+      });
+      setRoutePerformance([]);
+      setSeasonalData({ current_month: 'December', active_seasonal_routes: [], optimization_recommendations: [] });
+      setUserAnalytics({ total_users: 0, active_users: 0 });
+      setSystemHealth({ status: 'unknown', uptime: 'N/A' });
+      setMonitoringData({ api_quota: { used_today: 0, daily_limit: 333, usage_percentage: 0 } });
     } finally {
       setLoading(false);
     }

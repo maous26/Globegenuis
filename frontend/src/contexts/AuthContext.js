@@ -65,15 +65,24 @@ export const AuthProvider = ({ children }) => {
       let message = 'Erreur de connexion';
       
       if (error.response) {
-        if (error.response.status === 400) {
-          message = error.response.data?.detail || 'Email ou mot de passe incorrect';
-        } else if (error.response.status === 401) {
-          message = 'Authentification échouée';
-        } else if (error.response.status >= 500) {
+        const status = error.response.status;
+        const data = error.response.data;
+        
+        if (status === 400) {
+          message = data?.detail || 'Email ou mot de passe incorrect';
+        } else if (status === 401) {
+          message = 'Non autorisé - vérifiez vos identifiants';
+        } else if (status === 403) {
+          message = 'Accès refusé';
+        } else if (status === 500) {
+          message = 'Erreur serveur - réessayez plus tard';
+        } else if (status >= 500) {
           message = 'Erreur serveur, veuillez réessayer plus tard';
+        } else {
+          message = `Erreur ${status}: ${data?.detail || 'Erreur inconnue'}`;
         }
       } else if (error.request) {
-        message = 'Impossible de contacter le serveur';
+        message = 'Impossible de contacter le serveur. Vérifiez votre connexion internet.';
       }
       
       toast.error(message);

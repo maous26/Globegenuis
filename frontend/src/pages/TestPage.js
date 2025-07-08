@@ -1,12 +1,11 @@
 import React from 'react';
-import ConnectionTest from '../components/ConnectionTest';
+import ApiKpisTest from '../components/ApiKpisTest';
 
 const TestPage = () => {
   return (
     <div style={{ padding: '20px' }}>
-      <h1>🔍 Page de Test de Connexion</h1>
-      <p>Cette page teste la connexion entre le frontend et le backend.</p>
-      <ConnectionTest />
+      <h1>API KPIs Test Page</h1>
+      <ApiKpisTest />
     </div>
   );
 };
