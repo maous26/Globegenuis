@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test de Connexion GlobeGenius</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .btn {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 16px;
+        }
+        .btn:hover { background: #0056b3; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Diagnostic de Connexion GlobeGenius</h1>
+        
+        <div id="status"></div>
+        
+        <div>
+            <button class="btn" onclick="testBackend()">Test Backend</button>
+            <button class="btn" onclick="testFrontend()">Test Frontend</button>
+            <button class="btn" onclick="testLogin()">Test Login</button>
+            <button class="btn" onclick="redirectToApp()">Ouvrir App</button>
+        </div>
+        
+        <div id="results"></div>
+        
+        <div class="status info">
+            <strong>Instructions :</strong><br>
+            1. Cliquez sur "Test Backend" et "Test Frontend" pour vérifier les services<br>
+            2. Cliquez sur "Test Login" pour tester l'authentification<br>
+            3. Si tout est vert, cliquez sur "Ouvrir App" pour accéder au dashboard<br>
+            4. Si problème persiste : <strong>Ctrl+Shift+R</strong> pour vider le cache
+        </div>
+        
+        <div class="status info">
+            <strong>URLs de connexion directe :</strong><br>
+            • Frontend : <a href="http://localhost:3001" target="_blank">http://localhost:3001</a><br>
+            • Backend API : <a href="http://localhost:8000/docs" target="_blank">http://localhost:8000/docs</a><br>
+            • Login : admin@globegenius.app / admin123
+        </div>
+    </div>
+
+    <script>
+        function showStatus(message, type) {
+            document.getElementById('status').innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+        
+        function showResults(title, data) {
+            const results = document.getElementById('results');
+            results.innerHTML = `<h3>${title}</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
+        
+        async function testBackend() {
+            try {
+                showStatus('🔍 Test du backend...', 'info');
+                
+                // Utiliser une requête simple sans CORS complexe
+                const response = await fetch('http://localhost:8000/api/v1/health/', {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showStatus('✅ Backend accessible et fonctionnel !', 'success');
+                    showResults('Backend Response', data);
+                } else {
+                    showStatus(`❌ Backend erreur: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Backend inaccessible: ${error.message}`, 'error');
+                console.error('Backend test error:', error);
+            }
+        }
+        
+        async function testFrontend() {
+            try {
+                showStatus('🔍 Test du frontend...', 'info');
+                
+                const response = await fetch('http://localhost:3001/', {
+                    method: 'HEAD',
+                    mode: 'cors'
+                });
+                
+                if (response.ok) {
+                    showStatus('✅ Frontend accessible et fonctionnel !', 'success');
+                    showResults('Frontend Status', { status: response.status, statusText: response.statusText });
+                } else {
+                    showStatus(`❌ Frontend erreur: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Frontend inaccessible: ${error.message}`, 'error');
+                console.error('Frontend test error:', error);
+            }
+        }
+        
+        async function testLogin() {
+            try {
+                showStatus('🔍 Test de l\\'authentification...', 'info');
+                
+                const formData = new URLSearchParams();
+                formData.append('username', 'admin@globegenius.app');
+                formData.append('password', 'admin123');
+                
+                const response = await fetch('http://localhost:8000/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showStatus('✅ Authentification réussie !', 'success');
+                    localStorage.setItem('access_token', data.access_token);
+                    showResults('Login Response', { 
+                        token_type: data.token_type, 
+                        token_preview: data.access_token.substring(0, 20) + '...' 
+                    });
+                } else {
+                    const errorData = await response.json();
+                    showStatus(`❌ Authentification échouée: ${errorData.detail}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Erreur d'authentification: ${error.message}`, 'error');
+                console.error('Login test error:', error);
+            }
+        }
+        
+        function redirectToApp() {
+            showStatus('🚀 Redirection vers l\\'application...', 'info');
+            window.open('http://localhost:3001', '_blank');
+        }
+        
+        // Test automatique au chargement
+        window.onload = function() {
+            showStatus('📡 Page de diagnostic chargée. Cliquez sur les boutons de test.', 'info');
+        };
+    </script>
+</body>
+</html>
