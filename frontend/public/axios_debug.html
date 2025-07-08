@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Axios Header Debug Test</title>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <h1>Axios Header Debug Test</h1>
+    
+    <div style="margin: 20px 0;">
+        <h2>Test Results:</h2>
+        <div id="results"></div>
+    </div>
+    
+    <button onclick="testAxiosWithDefaultHeaders()">Test Axios with Default Headers</button>
+    <button onclick="testAxiosWithoutDefaultHeaders()">Test Axios without Default Headers</button>
+    <button onclick="testAxiosWithHeaderOverride()">Test Axios with Header Override</button>
+    
+    <script>
+        const API_BASE_URL = 'http://localhost:8000/api/v1';
+        const results = document.getElementById('results');
+        
+        function logResult(test, success, data, error, details) {
+            const div = document.createElement('div');
+            div.style.margin = '10px 0';
+            div.style.padding = '10px';
+            div.style.border = success ? '2px solid green' : '2px solid red';
+            div.style.backgroundColor = success ? '#d4edda' : '#f8d7da';
+            
+            div.innerHTML = `
+                <strong>${test}</strong><br>
+                Status: ${success ? 'SUCCESS ✅' : 'FAILED ❌'}<br>
+                ${success ? 'Data: ' + JSON.stringify(data, null, 2) : 'Error: ' + error}<br>
+                ${details ? 'Details: ' + details : ''}
+            `;
+            results.appendChild(div);
+        }
+        
+        async function testAxiosWithDefaultHeaders() {
+            console.log('🧪 Testing Axios with default JSON headers (like our current API)');
+            
+            // Create axios instance like our current api.js
+            const apiWithDefaults = axios.create({
+                baseURL: API_BASE_URL,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+            
+            try {
+                console.log('Request config before send:', {
+                    url: '/auth/login',
+                    method: 'POST',
+                    data: new URLSearchParams({
+                        username: 'admin@globegenius.com',
+                        password: 'admin123'
+                    }),
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                });
+                
+                const response = await apiWithDefaults.post('/auth/login', 
+                    new URLSearchParams({
+                        username: 'admin@globegenius.com',
+                        password: 'admin123'
+                    }), 
+                    {
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                    }
+                );
+                
+                logResult('Axios with Default JSON Headers', true, response.data, null, 'Headers properly overridden');
+            } catch (error) {
+                console.error('Full error:', error);
+                logResult('Axios with Default JSON Headers', false, null, 
+                    `${error.response?.status}: ${JSON.stringify(error.response?.data) || error.message}`,
+                    `Request headers: ${JSON.stringify(error.config?.headers || {})}`);
+            }
+        }
+        
+        async function testAxiosWithoutDefaultHeaders() {
+            console.log('🧪 Testing Axios without default headers');
+            
+            // Create axios instance without default headers
+            const apiWithoutDefaults = axios.create({
+                baseURL: API_BASE_URL
+            });
+            
+            try {
+                const response = await apiWithoutDefaults.post('/auth/login', 
+                    new URLSearchParams({
+                        username: 'admin@globegenius.com',
+                        password: 'admin123'
+                    }), 
+                    {
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                    }
+                );
+                
+                logResult('Axios without Default Headers', true, response.data);
+            } catch (error) {
+                logResult('Axios without Default Headers', false, null, 
+                    `${error.response?.status}: ${JSON.stringify(error.response?.data) || error.message}`);
+            }
+        }
+        
+        async function testAxiosWithHeaderOverride() {
+            console.log('🧪 Testing Axios with explicit header override');
+            
+            try {
+                const response = await axios.post(`${API_BASE_URL}/auth/login`, 
+                    new URLSearchParams({
+                        username: 'admin@globegenius.com',
+                        password: 'admin123'
+                    }), 
+                    {
+                        headers: { 
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'Accept': 'application/json'
+                        }
+                    }
+                );
+                
+                logResult('Axios with Header Override', true, response.data);
+            } catch (error) {
+                logResult('Axios with Header Override', false, null, 
+                    `${error.response?.status}: ${JSON.stringify(error.response?.data) || error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>
