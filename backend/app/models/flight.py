@@ -13,6 +13,22 @@ class Route(Base):
     tier = Column(Integer, nullable=False, default=3)  # 1, 2, or 3
     scan_interval_hours = Column(Integer, nullable=False, default=6)
     is_active = Column(Boolean, default=True)
+    
+    # Round-trip specific fields
+    route_type = Column(String(20), default="round_trip")  # "round_trip" only
+    region = Column(String(50))  # "europe_proche", "europe_populaire", "long_courrier"
+    min_stay_nights = Column(Integer, default=3)  # Minimum stay duration
+    max_stay_nights = Column(Integer, default=30)  # Maximum stay duration
+    
+    # Departure timing constraints
+    min_advance_booking_days = Column(Integer, default=30)  # 1 month minimum
+    max_advance_booking_days = Column(Integer, default=270)  # 9 months maximum
+    
+    # Short stay patterns (weekday constraints)
+    allow_mon_wed = Column(Boolean, default=True)  # Monday to Wednesday (3 days)
+    allow_tue_fri = Column(Boolean, default=True)  # Tuesday to Friday (4 days)
+    allow_wed_sun = Column(Boolean, default=True)  # Wednesday to Sunday (5 days)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -20,6 +36,8 @@ class Route(Base):
     __table_args__ = (
         Index('idx_route_origin_destination', 'origin', 'destination'),
         Index('idx_route_tier', 'tier'),
+        Index('idx_route_region', 'region'),
+        Index('idx_route_type', 'route_type'),
     )
     
     # Relationships
@@ -67,6 +85,18 @@ class Deal(Base):
     discount_percentage = Column(Float, nullable=False)
     anomaly_score = Column(Float)  # ML anomaly detection score
     
+    # Round-trip specific fields
+    stay_duration_nights = Column(Integer)  # Calculated stay duration
+    departure_day_of_week = Column(Integer)  # 1=Monday, 7=Sunday
+    return_day_of_week = Column(Integer)
+    advance_booking_days = Column(Integer)  # Days between booking and departure
+    
+    # Deal validation flags
+    meets_stay_requirements = Column(Boolean, default=False)
+    meets_timing_requirements = Column(Boolean, default=False)
+    meets_advance_booking = Column(Boolean, default=False)
+    is_valid_round_trip = Column(Boolean, default=False)  # All requirements met
+    
     # Deal metadata
     is_error_fare = Column(Boolean, default=False)
     confidence_score = Column(Float)
@@ -80,6 +110,9 @@ class Deal(Base):
     __table_args__ = (
         Index('idx_deals_active_expires', 'is_active', 'expires_at'),
         Index('idx_deals_discount', 'discount_percentage'),
+        Index('idx_deals_valid_round_trip', 'is_valid_round_trip'),
+        Index('idx_deals_stay_duration', 'stay_duration_nights'),
+        Index('idx_deals_advance_booking', 'advance_booking_days'),
     )
     
     # Relationships

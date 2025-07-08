@@ -214,7 +214,7 @@ class DynamicRouteManager:
             Deal.route_id == route.id
         ).order_by(Deal.detected_at.desc()).first()
         
-        if last_deal:
+        if last_deal and last_deal[0] is not None:
             # Gérer les datetimes avec/sans timezone
             if last_deal[0].tzinfo is not None:
                 # Si la date a un timezone, utiliser UTC
@@ -451,7 +451,7 @@ class DynamicRouteManager:
                 
                 if route:
                     # Mettre à jour l'intervalle
-                    route.scan_interval_hours = int(scan_config['scan_interval_hours'])
+                    route.scan_interval_hours = int(scan_config['daily_scans'])
                     logger.info(
                         f"Route {route.origin}→{route.destination} : "
                         f"{scan_config['daily_scans']} scans/jour "
@@ -564,6 +564,78 @@ class DynamicRouteManager:
             })
         
         return suggestions
+
+    def enhance_for_round_trip_deals(self):
+        """
+        Enhanced the dynamic route manager to support round-trip deal constraints
+        while preserving all existing intelligence
+        """
+        logger.info("Enhancing dynamic route manager for round-trip deals...")
+        
+        # Regional classifications for existing routes
+        regional_mapping = {
+            # Europe proche (3-7 nuits)
+            'europe_proche': [
+                'AMS', 'BRU', 'FRA', 'ZUR', 'GVA', 'MXP', 'FCO', 'NAP', 
+                'TXL', 'MUC', 'VIE', 'PRG', 'WAW', 'CPH', 'OSL', 'ARN',
+                'NCE', 'MRS', 'LYS', 'BOD', 'TLS', 'NTE', 'LIL', 'STR', 'MPL'
+            ],
+            # Europe populaire (7-14 nuits)  
+            'europe_populaire': [
+                'LHR', 'LGW', 'MAN', 'EDI', 'DUB', 'MAD', 'BCN', 'VLC',
+                'LIS', 'OPO', 'ATH', 'SKG', 'IST', 'PMI', 'IBZ', 'HER',
+                'RHO', 'CFU', 'DBV', 'SPU', 'CAI', 'CMN', 'RAK', 'TUN'
+            ],
+            # Long courrier (15-30 nuits)
+            'long_courrier': [
+                'JFK', 'LAX', 'SFO', 'ORD', 'BOS', 'YUL', 'YYZ', 'GRU',
+                'SCL', 'EZE', 'NRT', 'KIX', 'ICN', 'PVG', 'BKK', 'SIN',
+                'DXB', 'DOH', 'CAI', 'JNB', 'MRU', 'FDF', 'PTP'
+            ]
+        }
+        
+        # Update existing routes with regional classification and round-trip settings
+        routes = self.db.query(Route).all()
+        updated_count = 0
+        
+        for route in routes:
+            # Determine region based on destination
+            region = 'europe_populaire'  # Default
+            for region_name, airports in regional_mapping.items():
+                if route.destination in airports:
+                    region = region_name
+                    break
+            
+            # Set round-trip specific fields
+            route.route_type = 'round_trip'
+            route.region = region
+            
+            # Set stay duration based on region
+            if region == 'europe_proche':
+                route.min_stay_nights = 3
+                route.max_stay_nights = 7
+            elif region == 'europe_populaire':
+                route.min_stay_nights = 7
+                route.max_stay_nights = 14
+            else:  # long_courrier
+                route.min_stay_nights = 15
+                route.max_stay_nights = 30
+            
+            # Advance booking constraints (1-9 months)
+            route.min_advance_booking_days = 30
+            route.max_advance_booking_days = 270
+            
+            # Allow all weekday patterns by default
+            route.allow_mon_wed = True
+            route.allow_tue_fri = True  
+            route.allow_wed_sun = True
+            
+            updated_count += 1
+        
+        self.db.commit()
+        logger.info(f"Enhanced {updated_count} routes for round-trip deals")
+        
+        return updated_count
 
 
 def create_seasonal_routes_config() -> Dict:
