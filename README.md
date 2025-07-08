@@ -9,6 +9,10 @@ GlobeGenius is a flight deal finder application that helps users discover and tr
 - Price tracking and alerts
 - User profile management
 - Responsive UI for all devices
+- Admin console with real-time API KPI dashboard
+  - API usage statistics
+  - Route performance metrics
+  - Response time monitoring
 
 ## Tech Stack
 
