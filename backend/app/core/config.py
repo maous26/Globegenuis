@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     SENDGRID_FROM_EMAIL: str = config("SENDGRID_FROM_EMAIL")
     SENDGRID_FROM_NAME: str = config("SENDGRID_FROM_NAME", default="GlobeGenius")
     
+    # Google OAuth
+    GOOGLE_CLIENT_ID: str = config("GOOGLE_CLIENT_ID", default="")
+    GOOGLE_CLIENT_SECRET: str = config("GOOGLE_CLIENT_SECRET", default="")
+    GOOGLE_REDIRECT_URI: str = config("GOOGLE_REDIRECT_URI", default="http://localhost:3003/auth/google/callback")
+    
     # Aviation APIs
     AVIATIONSTACK_API_KEY: str = config("AVIATIONSTACK_API_KEY")
     AVIATIONSTACK_BASE_URL: str = config("AVIATIONSTACK_BASE_URL", default="https://api.aviationstack.com/v1")

@@ -7,8 +7,91 @@ from app import models, schemas
 from app.core import security
 from app.core.config import settings
 from app.core.database import get_db
+from app.services.google_auth import GoogleAuthService
 
 router = APIRouter()
+
+
+@router.get("/google/url")
+def get_google_auth_url():
+    """Get Google OAuth authorization URL"""
+    google_service = GoogleAuthService()
+    auth_url = google_service.get_google_auth_url()
+    return {"auth_url": auth_url}
+
+
+@router.post("/google/callback")
+async def google_callback(
+    code: str = Body(..., embed=True),
+    db: Session = Depends(get_db)
+):
+    """Handle Google OAuth callback"""
+    google_service = GoogleAuthService()
+    
+    try:
+        # Get user info from Google
+        google_user = await google_service.get_google_user_info(code)
+        
+        # Check if user exists
+        existing_user = db.query(models.User).filter(
+            models.User.google_id == google_user['id']
+        ).first()
+        
+        if not existing_user:
+            # Check if user exists with same email
+            existing_user = db.query(models.User).filter(
+                models.User.email == google_user['email']
+            ).first()
+            
+            if existing_user:
+                # Link Google account to existing user
+                existing_user.google_id = google_user['id']
+                existing_user.auth_provider = "google"
+                existing_user.profile_picture = google_user.get('picture')
+                existing_user.is_verified = True
+            else:
+                # Create new user
+                existing_user = models.User(
+                    email=google_user['email'],
+                    first_name=google_user.get('given_name', ''),
+                    last_name=google_user.get('family_name', ''),
+                    google_id=google_user['id'],
+                    auth_provider="google",
+                    profile_picture=google_user.get('picture'),
+                    is_verified=True,
+                    hashed_password=""  # No password for Google users
+                )
+                db.add(existing_user)
+        
+        # Update last login
+        existing_user.last_login_at = datetime.now()
+        db.commit()
+        
+        # Create access token
+        access_token_expires = timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        )
+        
+        access_token = security.create_access_token(
+            existing_user.email, expires_delta=access_token_expires
+        )
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": existing_user.id,
+                "email": existing_user.email,
+                "first_name": existing_user.first_name,
+                "last_name": existing_user.last_name,
+                "profile_picture": existing_user.profile_picture,
+                "tier": existing_user.tier.value,
+                "is_admin": existing_user.is_admin
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Google authentication failed: {str(e)}")
 
 
 @router.post("/login", response_model=schemas.Token)
@@ -17,13 +100,28 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends()
 ) -> Any:
     """OAuth2 compatible token login"""
+    # Debug logging
+    print(f"DEBUG: Login attempt for username: '{form_data.username}' (length: {len(form_data.username)})")
+    print(f"DEBUG: Password length: {len(form_data.password)}")
+    
     user = db.query(models.User).filter(
         models.User.email == form_data.username
     ).first()
     
-    if not user or not security.verify_password(
-        form_data.password, user.hashed_password
-    ):
+    if not user:
+        print(f"DEBUG: User not found for email: '{form_data.username}'")
+        raise HTTPException(
+            status_code=400,
+            detail="Incorrect email or password"
+        )
+    
+    print(f"DEBUG: User found: {user.email}, is_active: {user.is_active}")
+    
+    password_valid = security.verify_password(form_data.password, user.hashed_password)
+    print(f"DEBUG: Password verification: {password_valid}")
+    
+    if not password_valid:
+        print(f"DEBUG: Password verification failed")
         raise HTTPException(
             status_code=400,
             detail="Incorrect email or password"

@@ -1,16 +1,19 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API_BASE_URL = `${API_URL}/api/v1`;
 
-console.log('API_URL configured as:', API_URL);
+console.log('API_URL configured as:', API_BASE_URL);
+console.log('Environment variables:', {
+  REACT_APP_API_URL: process.env.REACT_APP_API_URL,
+  NODE_ENV: process.env.NODE_ENV
+});
 
 // Create axios instance
 const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  baseURL: API_BASE_URL,
+  // Don't set default Content-Type here - let individual requests set it
 });
 
 // Request interceptor to add auth token
@@ -59,13 +62,25 @@ export const checkBackendHealth = async () => {
 
 // Auth endpoints
 export const authAPI = {
-  login: (email, password) => 
-    api.post('/auth/login', new URLSearchParams({
-      username: email,
-      password: password,
-    }), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-    }),
+  login: async (email, password) => {
+    console.log('🔐 Attempting login with email:', email);
+    console.log('🔐 Using URLSearchParams for form data');
+    
+    try {
+      const response = await api.post('/auth/login', new URLSearchParams({
+        username: email,
+        password: password,
+      }), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
+      
+      console.log('✅ Login successful:', response.data);
+      return response;
+    } catch (error) {
+      console.error('❌ Login failed:', error.response?.status, error.response?.data);
+      throw error;
+    }
+  },
   
   signup: async (userData) => {
     try {
@@ -97,9 +112,13 @@ export const authAPI = {
     }
   },
   
-  forgotPassword: (data) => api.post('/auth/forgot-password', data),
+  forgotPassword: (data) => api.post('/auth/forgot-password', data, {
+    headers: { 'Content-Type': 'application/json' }
+  }),
   
-  resetPassword: (data) => api.post('/auth/reset-password', data),
+  resetPassword: (data) => api.post('/auth/reset-password', data, {
+    headers: { 'Content-Type': 'application/json' }
+  }),
   
   verifyResetToken: (token) => api.post('/auth/verify-reset-token', null, {
     params: { token }
@@ -109,12 +128,20 @@ export const authAPI = {
 // User endpoints
 export const userAPI = {
   me: () => api.get('/users/me'),
-  updateMe: (data) => api.put('/users/me', data),
-  updateProfile: (data) => api.put('/users/me', data),
+  updateMe: (data) => api.put('/users/me', data, {
+    headers: { 'Content-Type': 'application/json' }
+  }),
+  updateProfile: (data) => api.put('/users/me', data, {
+    headers: { 'Content-Type': 'application/json' }
+  }),
   updateOnboarding: (step, data) => 
-    api.put('/users/me/onboarding', { step, data }),
+    api.put('/users/me/onboarding', { step, data }, {
+      headers: { 'Content-Type': 'application/json' }
+    }),
   getAlertPreferences: () => api.get('/users/me/alert-preferences'),
-  updateAlertPreferences: (data) => api.put('/users/me/alert-preferences', data),
+  updateAlertPreferences: (data) => api.put('/users/me/alert-preferences', data, {
+    headers: { 'Content-Type': 'application/json' }
+  }),
 };
 
 // Flight endpoints

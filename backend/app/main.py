@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api.endpoints import auth, users, flights, health
+from app.api.endpoints import auth, users, flights, health, admin
 from app.core.database import engine, Base
 from app.utils.logger import logger
 
@@ -47,6 +47,7 @@ app.include_router(health.router, prefix="/api/v1/health", tags=["health"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
 app.include_router(flights.router, prefix="/api/v1/flights", tags=["flights"])
+app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 
 
 @app.on_event("startup")

@@ -4,6 +4,8 @@ import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
 import { Plane, Mail, Lock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import GoogleAuthButton from '../components/GoogleAuthButton';
+import toast from 'react-hot-toast';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -16,14 +18,19 @@ const Login = () => {
   const onSubmit = async (data) => {
     setLoading(true);
     setLoginError('');
-    console.log('Attempting login with:', { email: data.email });
+
+    // Trim whitespace from inputs to avoid issues
+    const trimmedEmail = data.email.trim();
+    const trimmedPassword = data.password.trim();
     
     try {
-      const result = await login(data.email, data.password);
+      const result = await login(trimmedEmail, trimmedPassword);
       
       if (result.success) {
-        console.log('Login successful, user:', result.user);
-        if (result.user.onboarding_completed) {
+        // Redirect based on user type and onboarding status
+        if (result.user.is_admin) {
+          navigate('/admin');
+        } else if (result.user.onboarding_completed) {
           navigate('/dashboard');
         } else {
           navigate('/onboarding');
@@ -37,6 +44,11 @@ const Login = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoogleAuthError = (error) => {
+    console.error('Google auth error:', error);
+    toast.error('Erreur lors de l\'authentification Google');
   };
 
   return (
@@ -133,6 +145,23 @@ const Login = () => {
               'Se connecter'
             )}
           </button>
+
+          {/* Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-white text-gray-500">ou</span>
+            </div>
+          </div>
+
+          {/* Google Auth Button */}
+          <GoogleAuthButton 
+            onError={handleGoogleAuthError}
+            className="mb-6"
+          />
+
         </form>
 
         <div className="mt-6 text-center">

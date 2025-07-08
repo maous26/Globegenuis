@@ -44,6 +44,16 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
     
+    # Google OAuth fields
+    google_id = Column(String(255), unique=True, nullable=True)
+    auth_provider = Column(String(50), default="email")  # "email" or "google"
+    profile_picture = Column(String(500), nullable=True)
+    
+    # Admin roles
+    is_admin = Column(Boolean, default=False)
+    is_superadmin = Column(Boolean, default=False)
+    admin_permissions = Column(JSON, default=list)  # ["routes", "users", "analytics"]
+    
     # Password reset
     reset_token = Column(String(255), nullable=True)
     reset_token_expires_at = Column(DateTime(timezone=True), nullable=True)

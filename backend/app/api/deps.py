@@ -51,13 +51,22 @@ def get_current_active_user(
 
 
 def get_current_admin_user(
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_active_user),
 ) -> models.User:
-    # For MVP, check if email is admin
-    # In production, add proper role management
-    if current_user.email not in ["admin@globegenius.com"]:
+    if not current_user.is_admin and not current_user.is_superadmin:
         raise HTTPException(
-            status_code=403,
-            detail="Not enough permissions"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return current_user
+
+
+def get_current_superadmin_user(
+    current_user: models.User = Depends(get_current_active_user),
+) -> models.User:
+    if not current_user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Superadmin access required"
         )
     return current_user

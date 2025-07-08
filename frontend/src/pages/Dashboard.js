@@ -71,7 +71,10 @@ const Dashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching deals:', error);
-      toast.error('Erreur lors du chargement des deals');
+      // Don't show error toast if it's just empty data
+      if (error.response?.status !== 200) {
+        toast.error('Erreur lors du chargement des deals');
+      }
     } finally {
       setLoading(false);
     }

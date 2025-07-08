@@ -16,6 +16,9 @@ import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
 import Deals from './pages/Deals';
 import Profile from './pages/Profile';
+import AuthCallback from './pages/AuthCallback';
+import AdminDashboard from './pages/AdminDashboard';
+import TestPage from './pages/TestPage';
 
 function App() {
   return (
@@ -42,6 +45,8 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/test" element={<TestComponent />} />
+            <Route path="/connection-test" element={<TestPage />} />
+            <Route path="/auth/google/callback" element={<AuthCallback />} />
             
             {/* Protected routes */}
             <Route element={<PrivateRoute />}>
@@ -49,6 +54,7 @@ function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/deals" element={<Deals />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/admin" element={<AdminDashboard />} />
             </Route>
             
             {/* Catch all */}

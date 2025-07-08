@@ -41,6 +41,11 @@ class User(UserBase):
     onboarding_completed: bool
     created_at: datetime
     
+    # Admin fields
+    is_admin: bool = False
+    is_superadmin: bool = False
+    admin_permissions: Optional[List[str]] = None
+    
     class Config:
         from_attributes = True
 

@@ -34,8 +34,7 @@ def get_active_deals(
     min_discount: Optional[float] = Query(None, ge=0, le=100),
     skip: int = 0,
     limit: int = 50,
-    db: Session = Depends(get_db),
-    current_user=Depends(deps.get_current_user)
+    db: Session = Depends(get_db)
 ):
     """Get active deals based on user preferences"""
     query = db.query(Deal).filter(Deal.is_active == True)
