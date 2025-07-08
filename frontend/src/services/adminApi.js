@@ -149,6 +149,31 @@ class AdminApiService {
   async getApiKpis(timeframe = '24h') {
     return this.makeRequest(`/api/kpis?timeframe=${timeframe}`);
   }
+
+  // Admin Settings
+  async getAdminSettings() {
+    return this.makeRequest('/settings');
+  }
+
+  async updateAdminSettings(settings) {
+    return this.makeRequest('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+  }
+
+  // Test Email Methods
+  async sendTestEmail() {
+    return this.makeRequest('/test-email', {
+      method: 'POST',
+    });
+  }
+
+  async sendTestAlert() {
+    return this.makeRequest('/test-alert', {
+      method: 'POST',
+    });
+  }
 }
 
 export default new AdminApiService();

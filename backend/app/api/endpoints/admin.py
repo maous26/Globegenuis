@@ -592,12 +592,11 @@ def get_api_kpis(
     
     error_scans = total_scans_with_status - successful_scans
     success_rate = (successful_scans / max(total_scans_with_status, 1)) * 100
-    
-    # Recent API calls for log
+     # Recent API calls for log
     recent_calls = db.query(PriceHistory).join(Route).filter(
         PriceHistory.scanned_at >= now - timedelta(hours=2)
     ).order_by(PriceHistory.scanned_at.desc()).limit(10).all()
-    
+
     recent_calls_data = []
     for call in recent_calls:
         route_name = f"{call.route.origin}→{call.route.destination}"
@@ -621,6 +620,68 @@ def get_api_kpis(
             "deals_found": deals_in_scan,
             "timestamp": call.scanned_at.strftime("%H:%M")
         })
+    
+    # Get active deals with details - properly join with PriceHistory to get flight details
+    active_deals = db.query(Deal, PriceHistory, Route).select_from(Deal).join(
+        PriceHistory, Deal.price_history_id == PriceHistory.id
+    ).join(
+        Route, Deal.route_id == Route.id
+    ).filter(
+        Deal.is_active == True,
+        Deal.detected_at >= cutoff
+    ).order_by(Deal.detected_at.desc()).limit(20).all()
+    
+    active_deals_data = []
+    for deal, price_history, route in active_deals:
+        route_name = f"{route.origin}→{route.destination}"
+        
+        # Calculate savings if we have price data
+        savings_amount = None
+        savings_percentage = None
+        if deal.normal_price and deal.deal_price:
+            savings_amount = deal.normal_price - deal.deal_price
+            savings_percentage = (savings_amount / deal.normal_price) * 100
+        
+        active_deals_data.append({
+            "id": deal.id,
+            "route": route_name,
+            "route_id": deal.route_id,
+            "tier": route.tier,
+            "deal_price": float(deal.deal_price) if deal.deal_price else None,
+            "normal_price": float(deal.normal_price) if deal.normal_price else None,
+            "savings_amount": float(savings_amount) if savings_amount else None,
+            "savings_percentage": round(savings_percentage, 1) if savings_percentage else None,
+            "discount_percentage": round(deal.discount_percentage, 1) if deal.discount_percentage else None,
+            "departure_date": price_history.departure_date.isoformat() if price_history.departure_date else None,
+            "return_date": price_history.return_date.isoformat() if price_history.return_date else None,
+            "detected_at": deal.detected_at.isoformat(),
+            "expires_at": deal.expires_at.isoformat() if deal.expires_at else None,
+            "flight_number": price_history.flight_number,
+            "airline": price_history.airline,
+            "currency": price_history.currency or "EUR",
+            "booking_class": price_history.booking_class,
+            "is_active": deal.is_active,
+            "is_error_fare": deal.is_error_fare,
+            "confidence_score": float(deal.confidence_score) if deal.confidence_score else None,
+            "anomaly_score": float(deal.anomaly_score) if deal.anomaly_score else None,
+            "freshness_hours": int((now - deal.detected_at).total_seconds() / 3600)
+        })
+    
+    # Count total active deals across different time periods
+    deals_last_24h = db.query(Deal).filter(
+        Deal.detected_at >= now - timedelta(hours=24),
+        Deal.is_active == True
+    ).count()
+    
+    deals_last_week = db.query(Deal).filter(
+        Deal.detected_at >= now - timedelta(days=7),
+        Deal.is_active == True
+    ).count()
+    
+    deals_last_month = db.query(Deal).filter(
+        Deal.detected_at >= now - timedelta(days=30),
+        Deal.is_active == True
+    ).count()
     
     # Calculate totals
     total_routes = sum(tier_stats[f"tier_{tier}"]["routes"] for tier in [1, 2, 3])
@@ -667,5 +728,327 @@ def get_api_kpis(
             "daily_calls": total_daily_calls,
             "monthly_calls": total_daily_calls * 30
         },
+        "deals": {
+            "active_deals": active_deals_data,
+            "total_active": len(active_deals_data),
+            "last_24h": deals_last_24h,
+            "last_week": deals_last_week,
+            "last_month": deals_last_month,
+            "average_savings": sum(d["savings_percentage"] for d in active_deals_data if d["savings_percentage"]) / max(len([d for d in active_deals_data if d["savings_percentage"]]), 1) if active_deals_data else 0
+        },
         "recent_calls": recent_calls_data
     }
+
+
+@router.get("/settings")
+def get_admin_settings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user)
+) -> Dict[str, Any]:
+    """Get admin settings including monitoring email"""
+    from app.models.admin_settings import AdminSettings
+    
+    settings = db.query(AdminSettings).first()
+    if not settings:
+        # Create default settings if none exist
+        settings = AdminSettings(
+            monitoring_email="admin@globegenius.app",
+            alert_notifications=True,
+            daily_reports=True,
+            api_quota_alerts=True,
+            deal_alerts=True
+        )
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    
+    return {
+        "monitoring_email": settings.monitoring_email,
+        "alert_notifications": settings.alert_notifications,
+        "daily_reports": settings.daily_reports,
+        "api_quota_alerts": settings.api_quota_alerts,
+        "deal_alerts": settings.deal_alerts,
+        "created_at": settings.created_at.isoformat() if settings.created_at else None,
+        "updated_at": settings.updated_at.isoformat() if settings.updated_at else None
+    }
+
+
+@router.put("/settings")
+def update_admin_settings(
+    settings_data: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user)
+) -> Dict[str, Any]:
+    """Update admin settings including monitoring email"""
+    from app.models.admin_settings import AdminSettings
+    from datetime import datetime
+    
+    settings = db.query(AdminSettings).first()
+    if not settings:
+        settings = AdminSettings()
+        db.add(settings)
+    
+    # Update settings
+    if "monitoring_email" in settings_data:
+        settings.monitoring_email = settings_data["monitoring_email"]
+    if "alert_notifications" in settings_data:
+        settings.alert_notifications = settings_data["alert_notifications"]
+    if "daily_reports" in settings_data:
+        settings.daily_reports = settings_data["daily_reports"]
+    if "api_quota_alerts" in settings_data:
+        settings.api_quota_alerts = settings_data["api_quota_alerts"]
+    if "deal_alerts" in settings_data:
+        settings.deal_alerts = settings_data["deal_alerts"]
+    
+    settings.updated_at = datetime.utcnow()
+    
+    try:
+        db.commit()
+        db.refresh(settings)
+        
+        return {
+            "success": True,
+            "message": "Admin settings updated successfully",
+            "settings": {
+                "monitoring_email": settings.monitoring_email,
+                "alert_notifications": settings.alert_notifications,
+                "daily_reports": settings.daily_reports,
+                "api_quota_alerts": settings.api_quota_alerts,
+                "deal_alerts": settings.deal_alerts,
+                "updated_at": settings.updated_at.isoformat()
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating admin settings: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to update admin settings"
+        )
+
+
+@router.post("/test-email")
+async def send_test_email(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user)
+) -> Dict[str, Any]:
+    """Send a test monitoring email to the configured monitoring email address"""
+    try:
+        from app.services.email_service import EmailService
+        from app.models.admin_settings import AdminSettings
+        from datetime import datetime
+        
+        # Get admin settings to find monitoring email
+        settings = db.query(AdminSettings).first()
+        if not settings or not settings.monitoring_email:
+            raise HTTPException(
+                status_code=400,
+                detail="No monitoring email configured. Please set up monitoring email first."
+            )
+        
+        # Initialize email service
+        email_service = EmailService()
+        
+        # Create test email content
+        subject = f"🚨 GlobeGenius Admin Test - {datetime.now().strftime('%H:%M:%S')}"
+        
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+            <div style="background: #28a745; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+                <h1 style="margin: 0;">✅ GlobeGenius Admin Test Email</h1>
+            </div>
+            
+            <div style="padding: 20px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 0 0 8px 8px;">
+                <h2 style="color: #28a745;">Monitoring Email Test Successful</h2>
+                
+                <p><strong>Test Timestamp:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                <p><strong>Triggered by:</strong> {current_user.email}</p>
+                <p><strong>Monitoring Email:</strong> {settings.monitoring_email}</p>
+                
+                <div style="background: white; padding: 15px; border-left: 4px solid #28a745; margin: 20px 0;">
+                    <h3>✅ System Status Check:</h3>
+                    <ul>
+                        <li>Email service: ✅ Operational</li>
+                        <li>Admin notifications: ✅ Active</li>
+                        <li>Monitoring email: ✅ Configured</li>
+                        <li>SendGrid integration: ✅ Working</li>
+                    </ul>
+                </div>
+                
+                <div style="background: #e7f3ff; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                    <p><strong>ℹ️ About This Test:</strong></p>
+                    <p>This test email confirms that the admin monitoring email system is working correctly. 
+                    In case of real system alerts, notifications will be sent to this email address.</p>
+                </div>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="http://localhost:3001/admin" 
+                       style="background: #007bff; color: white; padding: 12px 24px; 
+                              text-decoration: none; border-radius: 4px; display: inline-block;">
+                        Back to Admin Dashboard
+                    </a>
+                </div>
+            </div>
+            
+            <div style="text-align: center; color: #6c757d; font-size: 12px; margin-top: 20px;">
+                <p>GlobeGenius Admin System</p>
+                <p>This is a test email sent from the admin dashboard</p>
+            </div>
+        </div>
+        """
+        
+        # Create and send email using SendGrid
+        from sendgrid.helpers.mail import Mail
+        
+        message = Mail(
+            from_email=(email_service.from_email.email, email_service.from_email.name),
+            to_emails=settings.monitoring_email,
+            subject=subject,
+            html_content=html_content
+        )
+        
+        response = email_service.sg.send(message)
+        
+        if response.status_code == 202:
+            message_id = response.headers.get("X-Message-Id", "no-id")
+            logger.info(f"Test email sent to {settings.monitoring_email}: {message_id}")
+            
+            return {
+                "success": True,
+                "message": f"Test email sent successfully to {settings.monitoring_email}",
+                "details": {
+                    "to_email": settings.monitoring_email,
+                    "message_id": message_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "status_code": response.status_code
+                }
+            }
+        else:
+            logger.error(f"Failed to send test email. Status: {response.status_code}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to send test email. SendGrid status: {response.status_code}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending test email: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send test email: {str(e)}"
+        )
+
+
+@router.post("/test-alert")
+async def send_test_alert(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user)
+) -> Dict[str, Any]:
+    """Send a test system alert to the monitoring email"""
+    try:
+        from app.services.email_service import EmailService
+        from app.models.admin_settings import AdminSettings
+        from datetime import datetime
+        
+        # Get admin settings
+        settings = db.query(AdminSettings).first()
+        if not settings or not settings.monitoring_email:
+            raise HTTPException(
+                status_code=400,
+                detail="No monitoring email configured"
+            )
+        
+        # Initialize email service
+        email_service = EmailService()
+        
+        # Create test alert email
+        subject = f"🚨 GlobeGenius System Alert - Test ({datetime.now().strftime('%H:%M:%S')})"
+        
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+            <div style="background: #dc3545; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+                <h1 style="margin: 0;">🚨 System Alert - TEST</h1>
+            </div>
+            
+            <div style="padding: 20px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 0 0 8px 8px;">
+                <h2 style="color: #dc3545;">Test System Alert</h2>
+                
+                <p><strong>Alert Type:</strong> Test Alert</p>
+                <p><strong>Severity:</strong> Info (Test)</p>
+                <p><strong>Timestamp:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                <p><strong>Triggered by:</strong> {current_user.email}</p>
+                
+                <div style="background: white; padding: 15px; border-left: 4px solid #dc3545; margin: 20px 0;">
+                    <h3>🔍 Simulated Alert Details:</h3>
+                    <p>This is a <strong>test alert</strong> to verify the monitoring email system.</p>
+                    
+                    <ul>
+                        <li><strong>Component:</strong> Email Notification System</li>
+                        <li><strong>Status:</strong> Test Mode</li>
+                        <li><strong>Action Required:</strong> None (this is a test)</li>
+                    </ul>
+                    
+                    <div style="background: #fff3cd; padding: 10px; border-radius: 4px; margin: 10px 0;">
+                        <p><strong>⚠️ Note:</strong> This is a test alert. No action is required. 
+                        If this were a real alert, it would contain specific details about system issues 
+                        that need attention.</p>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="http://localhost:3001/admin" 
+                       style="background: #007bff; color: white; padding: 12px 24px; 
+                              text-decoration: none; border-radius: 4px; display: inline-block;">
+                        View Admin Dashboard
+                    </a>
+                </div>
+            </div>
+            
+            <div style="text-align: center; color: #6c757d; font-size: 12px; margin-top: 20px;">
+                <p>GlobeGenius Monitoring System</p>
+                <p>Alert sent to: {settings.monitoring_email}</p>
+            </div>
+        </div>
+        """
+        
+        # Send email
+        from sendgrid.helpers.mail import Mail
+        
+        message = Mail(
+            from_email=(email_service.from_email.email, email_service.from_email.name),
+            to_emails=settings.monitoring_email,
+            subject=subject,
+            html_content=html_content
+        )
+        
+        response = email_service.sg.send(message)
+        
+        if response.status_code == 202:
+            message_id = response.headers.get("X-Message-Id", "no-id")
+            logger.info(f"Test alert sent to {settings.monitoring_email}: {message_id}")
+            
+            return {
+                "success": True,
+                "message": f"Test alert sent successfully to {settings.monitoring_email}",
+                "details": {
+                    "alert_type": "test",
+                    "to_email": settings.monitoring_email,
+                    "message_id": message_id,
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to send test alert. SendGrid status: {response.status_code}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending test alert: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send test alert: {str(e)}"
+        )

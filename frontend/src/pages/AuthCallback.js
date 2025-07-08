@@ -30,7 +30,7 @@ const AuthCallback = () => {
 
       try {
         // Send code to backend
-        const response = await fetch('/api/v1/auth/google/callback', {
+        const response = await fetch('http://localhost:8000/api/v1/auth/google/callback', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

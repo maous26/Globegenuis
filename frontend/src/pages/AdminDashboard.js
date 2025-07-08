@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import AdminApiService from '../services/adminApi';
 import { 
   Users, 
+  User,
   Plane, 
   DollarSign, 
   Bell, 
@@ -325,7 +326,8 @@ const AdminDashboard = () => {
               { id: 'api-kpis', name: 'API KPIs', icon: Zap },
               { id: 'seasonal', name: 'Seasonal Strategy', icon: Activity },
               { id: 'users', name: 'User Analytics', icon: Users },
-              { id: 'system', name: 'System Health', icon: Settings }
+              { id: 'system', name: 'System Health', icon: Settings },
+              { id: 'admin-settings', name: 'Admin Settings', icon: User }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -389,6 +391,11 @@ const AdminDashboard = () => {
           <SystemHealthTab 
             health={systemHealth} 
             monitoring={monitoringData}
+          />
+        )}
+        {activeTab === 'admin-settings' && (
+          <AdminSettingsTab 
+            adminApi={adminApi}
           />
         )}
       </div>
@@ -1427,6 +1434,417 @@ const ApiKpisTab = ({ monitoring, dashboardData, onTriggerTierScan, adminApi }) 
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Active Deals Section */}
+      {apiKpisData.deals && apiKpisData.deals.active_deals && apiKpisData.deals.active_deals.length > 0 && (
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-medium text-gray-900">Active Deals</h3>
+              <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                {apiKpisData.deals.total_active} active deals
+              </span>
+            </div>
+            <div className="mt-2 grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="text-center">
+                <div className="text-sm font-medium text-gray-500">Last 24h</div>
+                <div className="text-lg font-bold text-blue-600">{apiKpisData.deals.last_24h}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm font-medium text-gray-500">Last Week</div>
+                <div className="text-lg font-bold text-green-600">{apiKpisData.deals.last_week}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm font-medium text-gray-500">Last Month</div>
+                <div className="text-lg font-bold text-purple-600">{apiKpisData.deals.last_month}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm font-medium text-gray-500">Avg Savings</div>
+                <div className="text-lg font-bold text-orange-600">{apiKpisData.deals.average_savings.toFixed(1)}%</div>
+              </div>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Route
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Price
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Savings
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Departure
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Airline
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Detected
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {apiKpisData.deals.active_deals.map((deal) => (
+                  <tr key={deal.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex flex-col">
+                        <div className="text-sm font-medium text-gray-900">{deal.route}</div>
+                        <div className={`text-xs font-medium px-2 py-1 rounded-full inline-block w-fit ${
+                          deal.tier === 1 ? 'bg-green-100 text-green-800' :
+                          deal.tier === 2 ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>
+                          Tier {deal.tier}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex flex-col">
+                        <div className="text-sm font-bold text-green-600">
+                          {deal.currency}{deal.deal_price}
+                        </div>
+                        {deal.normal_price && (
+                          <div className="text-xs text-gray-500 line-through">
+                            {deal.currency}{deal.normal_price}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {deal.savings_percentage && (
+                        <div className="flex flex-col">
+                          <div className="text-sm font-medium text-red-600">
+                            -{deal.savings_percentage}%
+                          </div>
+                          {deal.savings_amount && (
+                            <div className="text-xs text-gray-500">
+                              -{deal.currency}{deal.savings_amount}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {deal.departure_date ? new Date(deal.departure_date).toLocaleDateString() : 'N/A'}
+                      {deal.return_date && (
+                        <div className="text-xs text-gray-500">
+                          Return: {new Date(deal.return_date).toLocaleDateString()}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex flex-col">
+                        <div className="text-sm text-gray-900">{deal.airline || 'N/A'}</div>
+                        {deal.deal_type && (
+                          <div className="text-xs text-gray-500">{deal.deal_type}</div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex flex-col">
+                        <div className="text-sm text-gray-900">
+                          {new Date(deal.detected_at).toLocaleString()}
+                        </div>
+                        <div className={`text-xs ${
+                          deal.freshness_hours < 24 ? 'text-green-600' :
+                          deal.freshness_hours < 72 ? 'text-yellow-600' : 'text-red-600'
+                        }`}>
+                          {deal.freshness_hours}h ago
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      {deal.booking_url && (
+                        <a
+                          href={deal.booking_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          View Deal
+                        </a>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Admin Settings Tab Component
+const AdminSettingsTab = ({ adminApi }) => {
+  const [settings, setSettings] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      setLoading(true);
+      const data = await adminApi.getAdminSettings();
+      setSettings(data);
+    } catch (error) {
+      console.error('Error loading admin settings:', error);
+      toast.error('Failed to load admin settings');
+      // Set default settings
+      setSettings({
+        monitoring_email: 'admin@globegenius.app',
+        alert_notifications: true,
+        daily_reports: true,
+        api_quota_alerts: true,
+        deal_alerts: true
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    try {
+      setSaving(true);
+      const result = await adminApi.updateAdminSettings(settings);
+      toast.success('Admin settings updated successfully!');
+      setSettings(result.settings);
+    } catch (error) {
+      console.error('Error updating admin settings:', error);
+      toast.error('Failed to update admin settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleInputChange = (field, value) => {
+    setSettings(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleSendTestEmail = async () => {
+    if (!settings?.monitoring_email) {
+      toast.error('Please configure a monitoring email address first');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const response = await adminApi.sendTestEmail();
+
+      if (response.success) {
+        toast.success(`Test email sent successfully to ${settings.monitoring_email}!`);
+        toast.success('Check your email (including spam folder) in 1-2 minutes', {
+          duration: 6000
+        });
+      } else {
+        toast.error('Failed to send test email');
+      }
+    } catch (error) {
+      console.error('Error sending test email:', error);
+      toast.error('Failed to send test email: ' + (error.message || 'Unknown error'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSendTestAlert = async () => {
+    if (!settings?.monitoring_email) {
+      toast.error('Please configure a monitoring email address first');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const response = await adminApi.sendTestAlert();
+
+      if (response.success) {
+        toast.success(`Test alert sent successfully to ${settings.monitoring_email}!`);
+        toast.success('This simulates a real system alert notification', {
+          duration: 6000
+        });
+      } else {
+        toast.error('Failed to send test alert');
+      }
+    } catch (error) {
+      console.error('Error sending test alert:', error);
+      toast.error('Failed to send test alert: ' + (error.message || 'Unknown error'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white shadow rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-6">Admin Configuration</h3>
+        
+        {/* Monitoring Email Section */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Monitoring Email Address
+            </label>
+            <p className="text-sm text-gray-600 mb-3">
+              All system alerts and monitoring notifications will be sent to this email address.
+            </p>
+            <div className="flex space-x-3">
+              <input
+                type="email"
+                value={settings?.monitoring_email || ''}
+                onChange={(e) => handleInputChange('monitoring_email', e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="admin@globegenius.app"
+              />
+              <button
+                onClick={handleSaveSettings}
+                disabled={saving}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+
+          {/* Notification Preferences */}
+          <div className="border-t pt-6">
+            <h4 className="text-md font-medium text-gray-900 mb-4">Notification Preferences</h4>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">General Alert Notifications</label>
+                  <p className="text-sm text-gray-600">Receive notifications for system alerts and errors</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings?.alert_notifications || false}
+                  onChange={(e) => handleInputChange('alert_notifications', e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Daily Reports</label>
+                  <p className="text-sm text-gray-600">Receive daily summary reports of system activity</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings?.daily_reports || false}
+                  onChange={(e) => handleInputChange('daily_reports', e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">API Quota Alerts</label>
+                  <p className="text-sm text-gray-600">Get notified when API quota usage exceeds thresholds</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings?.api_quota_alerts || false}
+                  onChange={(e) => handleInputChange('api_quota_alerts', e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">New Deal Alerts</label>
+                  <p className="text-sm text-gray-600">Receive notifications when new flight deals are found</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings?.deal_alerts || false}
+                  onChange={(e) => handleInputChange('deal_alerts', e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Test Email Section */}
+          <div className="border-t pt-6">
+            <h4 className="text-md font-medium text-gray-900 mb-4">Test Notifications</h4>
+            <p className="text-sm text-gray-600 mb-4">
+              Test the email system by sending sample emails to your monitoring address.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={handleSendTestEmail}
+                disabled={saving || !settings?.monitoring_email}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              >
+                {saving ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>📧</span>
+                    <span>Send Test Email</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleSendTestAlert}
+                disabled={saving || !settings?.monitoring_email}
+                className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              >
+                {saving ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🚨</span>
+                    <span>Send Test Alert</span>
+                  </>
+                )}
+              </button>
+            </div>
+            {!settings?.monitoring_email && (
+              <p className="text-sm text-red-600 mt-2">
+                Please configure a monitoring email address first.
+              </p>
+            )}
+          </div>
+
+          {/* Settings Info */}
+          {settings?.updated_at && (
+            <div className="border-t pt-4">
+              <p className="text-sm text-gray-500">
+                Last updated: {new Date(settings.updated_at).toLocaleString()}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -5,7 +5,7 @@ const GoogleAuthButton = ({ onSuccess, onError, className = '', children }) => {
   const handleGoogleAuth = async () => {
     try {
       // Get Google auth URL from backend
-      const response = await fetch('/api/v1/auth/google/url');
+      const response = await fetch('http://localhost:8000/api/v1/auth/google/url');
       const data = await response.json();
       
       if (data.auth_url) {
