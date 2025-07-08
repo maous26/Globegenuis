@@ -100,28 +100,19 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends()
 ) -> Any:
     """OAuth2 compatible token login"""
-    # Debug logging
-    print(f"DEBUG: Login attempt for username: '{form_data.username}' (length: {len(form_data.username)})")
-    print(f"DEBUG: Password length: {len(form_data.password)}")
-    
     user = db.query(models.User).filter(
         models.User.email == form_data.username
     ).first()
     
     if not user:
-        print(f"DEBUG: User not found for email: '{form_data.username}'")
         raise HTTPException(
             status_code=400,
             detail="Incorrect email or password"
         )
     
-    print(f"DEBUG: User found: {user.email}, is_active: {user.is_active}")
-    
     password_valid = security.verify_password(form_data.password, user.hashed_password)
-    print(f"DEBUG: Password verification: {password_valid}")
     
     if not password_valid:
-        print(f"DEBUG: Password verification failed")
         raise HTTPException(
             status_code=400,
             detail="Incorrect email or password"

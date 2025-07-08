@@ -144,6 +144,11 @@ class AdminApiService {
   async previewExpansion(targetRoutes, focusArea = 'balanced') {
     return this.makeRequest(`/routes/expansion/preview?target_routes=${targetRoutes}&focus_area=${focusArea}`);
   }
+
+  // API KPIs
+  async getApiKpis(timeframe = '24h') {
+    return this.makeRequest(`/api/kpis?timeframe=${timeframe}`);
+  }
 }
 
 export default new AdminApiService();

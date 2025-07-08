@@ -113,4 +113,5 @@ backend/celerybeat-schedule*
 
 # Misc
 .DS_Store
-models/*.pkl
+models/*.pklbackend/.env
+frontend/.env

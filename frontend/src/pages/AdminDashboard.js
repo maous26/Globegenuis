@@ -254,6 +254,7 @@ const AdminDashboard = () => {
               { id: 'overview', name: 'Overview', icon: BarChart3 },
               { id: 'routes', name: 'Route Monitoring', icon: MapPin },
               { id: 'expansion', name: 'Route Expansion', icon: Network },
+              { id: 'api-kpis', name: 'API KPIs', icon: Zap },
               { id: 'seasonal', name: 'Seasonal Strategy', icon: Activity },
               { id: 'users', name: 'User Analytics', icon: Users },
               { id: 'system', name: 'System Health', icon: Settings }
@@ -300,6 +301,14 @@ const AdminDashboard = () => {
             onLoadData={loadExpansionData}
             onSmartExpansion={handleSmartExpansion}
             onPreviewExpansion={handlePreviewExpansion}
+          />
+        )}
+        {activeTab === 'api-kpis' && (
+          <ApiKpisTab 
+            monitoring={monitoringData}
+            dashboardData={dashboardData}
+            onTriggerTierScan={triggerTierScan}
+            adminApi={adminApi}
           />
         )}
         {activeTab === 'seasonal' && (
@@ -1010,6 +1019,348 @@ const RouteExpansionTab = ({
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+// API KPIs Tab Component
+const ApiKpisTab = ({ monitoring, dashboardData, onTriggerTierScan, adminApi }) => {
+  const [selectedTimeframe, setSelectedTimeframe] = useState('24h');
+  const [apiKpisData, setApiKpisData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
+  // Load API KPIs data
+  useEffect(() => {
+    loadApiKpis();
+  }, [selectedTimeframe]);
+
+  const loadApiKpis = async () => {
+    try {
+      setLoading(true);
+      const data = await adminApi.getApiKpis(selectedTimeframe);
+      setApiKpisData(data);
+    } catch (error) {
+      console.error('Error loading API KPIs:', error);
+      toast.error('Failed to load API KPIs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!apiKpisData) {
+    return (
+      <div className="text-center py-20">
+        <p className="text-gray-500">No API KPIs data available</p>
+      </div>
+    );
+  }
+
+  const ApiStatCard = ({ title, value, subtitle, icon: Icon, color = 'blue', trend = null }) => (
+    <div className="bg-white overflow-hidden shadow rounded-lg">
+      <div className="p-5">
+        <div className="flex items-center">
+          <div className="flex-shrink-0">
+            <Icon className={`h-6 w-6 text-${color}-600`} />
+          </div>
+          <div className="ml-5 w-0 flex-1">
+            <dl>
+              <dt className="text-sm font-medium text-gray-500 truncate">{title}</dt>
+              <dd className="text-lg font-semibold text-gray-900">{value}</dd>
+              {subtitle && (
+                <dd className="text-sm text-gray-600">{subtitle}</dd>
+              )}
+              {trend && (
+                <dd className={`text-sm font-medium ${trend.positive ? 'text-green-600' : 'text-red-600'}`}>
+                  {trend.positive ? '↗' : '↘'} {trend.value}
+                </dd>
+              )}
+            </dl>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const TierBreakdownCard = ({ tier, data, color, onTriggerTierScan }) => (
+    <div className="bg-white shadow rounded-lg p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h4 className={`text-lg font-medium text-${color}-700`}>
+          Tier {tier} Routes
+        </h4>
+        <span className={`px-3 py-1 rounded-full text-sm font-medium bg-${color}-100 text-${color}-800`}>
+          Every {data.scan_interval_hours}h
+        </span>
+      </div>
+      
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-sm text-gray-500">Active Routes</p>
+          <p className="text-2xl font-bold text-gray-900">{data.routes}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Scans/Day</p>
+          <p className="text-2xl font-bold text-gray-900">{data.scans_per_day}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Daily API Calls</p>
+          <p className="text-2xl font-bold text-gray-900">{data.daily_api_calls}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Deals Found</p>
+          <p className="text-2xl font-bold text-gray-900">{data.deals_found}</p>
+        </div>
+      </div>
+      
+      <div className="mt-4">
+        <button
+          onClick={() => onTriggerTierScan(tier)}
+          className={`w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-${color}-600 hover:bg-${color}-700`}
+        >
+          <Zap className="h-4 w-4 mr-2" />
+          Trigger Tier {tier} Scan
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Header with timeframe selector */}
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-gray-900">API Usage KPIs</h2>
+        <select
+          value={selectedTimeframe}
+          onChange={(e) => setSelectedTimeframe(e.target.value)}
+          className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+        >
+          <option value="24h">Last 24 hours</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+        </select>
+      </div>
+
+      {/* Main KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <ApiStatCard
+          title="Daily API Calls"
+          value={apiKpisData.daily_api_calls.toLocaleString()}
+          subtitle={`${apiKpisData.monthly_api_calls.toLocaleString()} monthly`}
+          icon={Activity}
+          color="blue"
+          trend={{ positive: true, value: '+5.2% vs yesterday' }}
+        />
+        <ApiStatCard
+          title="Quota Usage"
+          value={`${apiKpisData.quota.usage_percentage.toFixed(1)}%`}
+          subtitle={`${apiKpisData.quota.remaining.toLocaleString()} calls remaining`}
+          icon={BarChart3}
+          color={apiKpisData.quota.usage_percentage > 90 ? 'red' : apiKpisData.quota.usage_percentage > 70 ? 'yellow' : 'green'}
+        />
+        <ApiStatCard
+          title="Monthly Cost"
+          value={`$${apiKpisData.cost.monthly_total.toFixed(2)}`}
+          subtitle={`$${apiKpisData.cost.per_call} per call`}
+          icon={DollarSign}
+          color="purple"
+        />
+        <ApiStatCard
+          title="Success Rate"
+          value={`${apiKpisData.performance.success_rate.toFixed(1)}%`}
+          subtitle="API call success rate"
+          icon={CheckCircle}
+          color="green"
+          trend={{ positive: apiKpisData.performance.success_rate > 95, value: '+0.3% vs last week' }}
+        />
+      </div>
+
+      {/* Quota Usage Progress */}
+      <div className="bg-white shadow rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Monthly Quota Progress</h3>
+        <div className="space-y-4">
+          <div className="flex justify-between text-sm text-gray-600">
+            <span>Used: {apiKpisData.quota.used.toLocaleString()}</span>
+            <span>Limit: {apiKpisData.quota.monthly_limit.toLocaleString()}</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-4">
+            <div 
+              className={`h-4 rounded-full transition-all duration-300 ${
+                apiKpisData.quota.usage_percentage > 90 ? 'bg-red-500' :
+                apiKpisData.quota.usage_percentage > 70 ? 'bg-yellow-500' : 'bg-green-500'
+              }`}
+              style={{ width: `${Math.min(apiKpisData.quota.usage_percentage, 100)}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">{apiKpisData.quota.usage_percentage.toFixed(1)}% used</span>
+            <span className={`font-medium ${
+              apiKpisData.quota.usage_percentage > 90 ? 'text-red-600' :
+              apiKpisData.quota.usage_percentage > 70 ? 'text-yellow-600' : 'text-green-600'
+            }`}>
+              {apiKpisData.quota.usage_percentage > 90 ? 'Critical' :
+               apiKpisData.quota.usage_percentage > 70 ? 'Warning' : 'Healthy'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Tier Breakdown */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <TierBreakdownCard tier={1} data={apiKpisData.tier_breakdown.tier_1} color="green" onTriggerTierScan={onTriggerTierScan} />
+        <TierBreakdownCard tier={2} data={apiKpisData.tier_breakdown.tier_2} color="yellow" onTriggerTierScan={onTriggerTierScan} />
+        <TierBreakdownCard tier={3} data={apiKpisData.tier_breakdown.tier_3} color="blue" onTriggerTierScan={onTriggerTierScan} />
+      </div>
+
+      {/* API Performance Metrics */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white shadow rounded-lg p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">API Response Times</h3>
+          <div className="space-y-4">
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">Average Response Time</span>
+              <span className="text-sm font-medium text-gray-900">
+                {apiKpisData.performance.avg_response_time > 0 ? 
+                  `${apiKpisData.performance.avg_response_time.toFixed(1)}s` : 'N/A'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">Min Response Time</span>
+              <span className="text-sm font-medium text-gray-900">
+                {apiKpisData.performance.min_response_time > 0 ? 
+                  `${apiKpisData.performance.min_response_time.toFixed(1)}s` : 'N/A'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">Max Response Time</span>
+              <span className="text-sm font-medium text-gray-900">
+                {apiKpisData.performance.max_response_time > 0 ? 
+                  `${apiKpisData.performance.max_response_time.toFixed(1)}s` : 'N/A'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">Total API Calls ({apiKpisData.period_name})</span>
+              <span className="text-sm font-medium text-gray-900">{apiKpisData.total_api_calls}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white shadow rounded-lg p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Error Analytics</h3>
+          <div className="space-y-4">
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">Total Errors ({apiKpisData.period_name})</span>
+              <span className="text-sm font-medium text-red-600">{apiKpisData.performance.total_errors}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">Success Rate</span>
+              <span className={`text-sm font-medium ${
+                apiKpisData.performance.success_rate > 95 ? 'text-green-600' : 
+                apiKpisData.performance.success_rate > 90 ? 'text-yellow-600' : 'text-red-600'
+              }`}>
+                {apiKpisData.performance.success_rate.toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">Active Routes</span>
+              <span className="text-sm font-medium text-gray-900">{apiKpisData.totals.routes}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">Projected Monthly Cost</span>
+              <span className="text-sm font-medium text-gray-900">
+                ${apiKpisData.cost.projected_monthly.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent API Calls Log */}
+      <div className="bg-white shadow rounded-lg">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">Recent API Calls</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Route
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Tier
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Response Time
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Deals Found
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Timestamp
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {apiKpisData.recent_calls.length > 0 ? (
+                apiKpisData.recent_calls.map((call, index) => (
+                  <tr key={index}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {call.route}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        call.tier === 1 ? 'bg-green-100 text-green-800' :
+                        call.tier === 2 ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-blue-100 text-blue-800'
+                      }`}>
+                        Tier {call.tier}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        call.status === 'Success' ? 'bg-green-100 text-green-800' :
+                        call.status === 'Error' || call.status === 'Failed' ? 'bg-red-100 text-red-800' :
+                        'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {call.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {call.response_time}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {call.deals_found > 0 ? (
+                        <span className="text-green-600 font-medium">{call.deals_found}</span>
+                      ) : (
+                        <span className="text-gray-400">0</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {call.timestamp}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
+                    No recent API calls found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };

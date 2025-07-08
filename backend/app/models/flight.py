@@ -41,6 +41,8 @@ class PriceHistory(Base):
     booking_class = Column(String(20))
     raw_data = Column(JSON)  # Store complete API response
     scanned_at = Column(DateTime(timezone=True), server_default=func.now())
+    response_time = Column(Float, nullable=True)  # API response time in seconds
+    status = Column(String(20), default="success")  # 'success', 'error', 'timeout'
     
     # Indexes
     __table_args__ = (

@@ -3,6 +3,10 @@ from typing import Any, Union
 from jose import jwt
 from passlib.context import CryptContext
 from app.core.config import settings
+import warnings
+
+# Suppress bcrypt version warning for Python 3.13 compatibility
+warnings.filterwarnings("ignore", message=".*bcrypt.*", category=UserWarning)
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

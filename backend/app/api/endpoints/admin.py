@@ -372,3 +372,183 @@ def preview_expansion(
         "preview_routes": preview_routes,
         "current_stats": current_stats
     }
+
+
+@router.get("/api/kpis")
+def get_api_kpis(
+    timeframe: str = Query("24h", description="Timeframe: 24h, 7d, 30d"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user)
+) -> Dict[str, Any]:
+    """Get real-time API KPIs and usage statistics"""
+    from datetime import datetime, timedelta
+    from app.models.flight import PriceHistory, Deal, Route
+    from app.models.alert import Alert
+    from sqlalchemy import func, and_
+    
+    # Define time periods
+    now = datetime.now()
+    if timeframe == "24h":
+        cutoff = now - timedelta(hours=24)
+        period_name = "Last 24 hours"
+    elif timeframe == "7d":
+        cutoff = now - timedelta(days=7)
+        period_name = "Last 7 days"
+    elif timeframe == "30d":
+        cutoff = now - timedelta(days=30)
+        period_name = "Last 30 days"
+    else:
+        cutoff = now - timedelta(hours=24)
+        period_name = "Last 24 hours"
+    
+    # API Usage Statistics
+    total_api_calls = db.query(PriceHistory).filter(
+        PriceHistory.scanned_at >= cutoff
+    ).count()
+    
+    # Daily API calls for quota calculation
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    daily_api_calls = db.query(PriceHistory).filter(
+        PriceHistory.scanned_at >= today
+    ).count()
+    
+    # Monthly API calls
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    monthly_api_calls = db.query(PriceHistory).filter(
+        PriceHistory.scanned_at >= month_start
+    ).count()
+    
+    # Route and tier breakdown
+    tier_stats = {}
+    for tier in [1, 2, 3]:
+        routes_count = db.query(Route).filter(
+            Route.tier == tier,
+            Route.is_active == True
+        ).count()
+        
+        # Calculate scans for this tier in the timeframe
+        tier_scans = db.query(PriceHistory).join(Route).filter(
+            Route.tier == tier,
+            PriceHistory.scanned_at >= cutoff
+        ).count()
+        
+        # Calculate deals found for this tier
+        tier_deals = db.query(Deal).join(Route).filter(
+            Route.tier == tier,
+            Deal.detected_at >= cutoff
+        ).count()
+        
+        # Calculate average scan interval for this tier
+        scan_interval = 2 if tier == 1 else (4 if tier == 2 else 6)
+        scans_per_day = routes_count * (24 / scan_interval) if routes_count > 0 else 0
+        
+        tier_stats[f"tier_{tier}"] = {
+            "routes": routes_count,
+            "scans_in_period": tier_scans,
+            "deals_found": tier_deals,
+            "scan_interval_hours": scan_interval,
+            "scans_per_day": int(scans_per_day),
+            "daily_api_calls": int(scans_per_day)
+        }
+    
+    # Performance metrics
+    performance_stats = db.query(
+        func.avg(PriceHistory.response_time).label('avg_response_time'),
+        func.min(PriceHistory.response_time).label('min_response_time'),
+        func.max(PriceHistory.response_time).label('max_response_time'),
+        func.count(PriceHistory.id).label('total_scans')
+    ).filter(
+        PriceHistory.scanned_at >= cutoff,
+        PriceHistory.response_time.isnot(None)
+    ).first()
+    
+    # Error statistics
+    total_scans_with_status = db.query(PriceHistory).filter(
+        PriceHistory.scanned_at >= cutoff,
+        PriceHistory.status.isnot(None)
+    ).count()
+    
+    successful_scans = db.query(PriceHistory).filter(
+        PriceHistory.scanned_at >= cutoff,
+        PriceHistory.status == 'success'
+    ).count()
+    
+    error_scans = total_scans_with_status - successful_scans
+    success_rate = (successful_scans / max(total_scans_with_status, 1)) * 100
+    
+    # Recent API calls for log
+    recent_calls = db.query(PriceHistory).join(Route).filter(
+        PriceHistory.scanned_at >= now - timedelta(hours=2)
+    ).order_by(PriceHistory.scanned_at.desc()).limit(10).all()
+    
+    recent_calls_data = []
+    for call in recent_calls:
+        route_name = f"{call.route.origin}→{call.route.destination}"
+        status = call.status or "unknown"
+        response_time = f"{call.response_time:.1f}s" if call.response_time else "N/A"
+        
+        # Count deals found for this specific scan
+        deals_in_scan = db.query(Deal).filter(
+            Deal.route_id == call.route_id,
+            Deal.detected_at.between(
+                call.scanned_at - timedelta(minutes=5),
+                call.scanned_at + timedelta(minutes=5)
+            )
+        ).count()
+        
+        recent_calls_data.append({
+            "route": route_name,
+            "tier": call.route.tier,
+            "status": status.title(),
+            "response_time": response_time,
+            "deals_found": deals_in_scan,
+            "timestamp": call.scanned_at.strftime("%H:%M")
+        })
+    
+    # Calculate totals
+    total_routes = sum(tier_stats[f"tier_{tier}"]["routes"] for tier in [1, 2, 3])
+    total_daily_calls = sum(tier_stats[f"tier_{tier}"]["daily_api_calls"] for tier in [1, 2, 3])
+    
+    # Quota calculations (assuming 10,000 monthly limit)
+    monthly_quota = 10000
+    quota_usage_percentage = (monthly_api_calls / monthly_quota) * 100
+    remaining_quota = max(0, monthly_quota - monthly_api_calls)
+    
+    # Cost calculations (assuming $0.005 per call)
+    cost_per_call = 0.005
+    monthly_cost = monthly_api_calls * cost_per_call
+    
+    return {
+        "timeframe": timeframe,
+        "period_name": period_name,
+        "total_api_calls": total_api_calls,
+        "daily_api_calls": daily_api_calls,
+        "monthly_api_calls": monthly_api_calls,
+        "quota": {
+            "monthly_limit": monthly_quota,
+            "used": monthly_api_calls,
+            "remaining": remaining_quota,
+            "usage_percentage": quota_usage_percentage,
+            "daily_limit": 333,  # 10000/30
+            "daily_used": daily_api_calls
+        },
+        "cost": {
+            "per_call": cost_per_call,
+            "monthly_total": monthly_cost,
+            "projected_monthly": total_daily_calls * 30 * cost_per_call
+        },
+        "performance": {
+            "avg_response_time": float(performance_stats.avg_response_time or 0),
+            "min_response_time": float(performance_stats.min_response_time or 0),
+            "max_response_time": float(performance_stats.max_response_time or 0),
+            "success_rate": success_rate,
+            "total_errors": error_scans
+        },
+        "tier_breakdown": tier_stats,
+        "totals": {
+            "routes": total_routes,
+            "daily_calls": total_daily_calls,
+            "monthly_calls": total_daily_calls * 30
+        },
+        "recent_calls": recent_calls_data
+    }
