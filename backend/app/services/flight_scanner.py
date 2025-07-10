@@ -3,9 +3,10 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from app.models.flight import Route, PriceHistory, Deal
-from app.services.aviation_api import AviationStackAPI
+from app.services.flightlabs_api import FlightLabsAPI
 from app.services.anomaly_detector import AnomalyDetector
 from app.services.round_trip_validator import RoundTripDealValidator
+from app.services.dual_api_validator import DualAPIValidator
 from app.utils.logger import logger
 from app.core.config import settings
 
@@ -13,9 +14,10 @@ from app.core.config import settings
 class FlightScanner:
     def __init__(self, db: Session):
         self.db = db
-        self.aviation_api = AviationStackAPI()
+        self.flightlabs_api = FlightLabsAPI()
         self.anomaly_detector = AnomalyDetector()
         self.round_trip_validator = RoundTripDealValidator(db)
+        self.dual_validator = DualAPIValidator(db)  # Dual API validation with TravelPayouts
         
     async def scan_route(self, route: Route) -> List[Deal]:
         """Scan a single route for round-trip deals (enhanced for intelligent routing)"""
@@ -34,14 +36,20 @@ class FlightScanner:
         min_stay = getattr(route, 'min_stay_nights', 3)
         max_stay = getattr(route, 'max_stay_nights', 14)
         
-        # Generate date ranges based on advance booking constraints
-        for days_ahead in range(min_advance, min(max_advance + 1, 180), 14):  # Bi-weekly intervals
+        # STRATEGIC SCANNING: Reduce API calls by scanning fewer date combinations
+        # Focus on popular travel periods and optimal booking windows
+        strategic_days_ahead = [30, 45, 60, 90, 120]  # Strategic booking windows
+        
+        for days_ahead in strategic_days_ahead:
+            if days_ahead < min_advance or days_ahead > max_advance:
+                continue
+                
             departure_date = datetime.now() + timedelta(days=days_ahead)
             
-            # Generate return dates based on stay duration requirements
-            stay_options = [min_stay, min_stay + 2, (min_stay + max_stay) // 2, max_stay - 1, max_stay]
+            # Focus on 2-3 strategic stay durations instead of 5
+            strategic_stays = [min_stay, (min_stay + max_stay) // 2, max_stay]
             
-            for stay_nights in stay_options:
+            for stay_nights in strategic_stays:
                 if stay_nights < min_stay or stay_nights > max_stay:
                     continue
                     
@@ -51,31 +59,30 @@ class FlightScanner:
                 if not self._is_valid_weekday_pattern(departure_date, return_date, stay_nights, route):
                     continue
                 
-                # Search round-trip flights
+                # Search round-trip flights using FlightLabs
                 try:
-                    outbound_flights = await self.aviation_api.search_flights(
+                    # Use FlightLabs for round-trip search with our database session
+                    flights = await self.flightlabs_api.search_flights(
                         origin=route.origin,
                         destination=route.destination,
-                        departure_date=departure_date
+                        departure_date=departure_date,
+                        return_date=return_date,
+                        db=self.db  # Pass the scanner's database session
                     )
                     
-                    return_flights = await self.aviation_api.search_flights(
-                        origin=route.destination,
-                        destination=route.origin,
-                        departure_date=return_date
-                    )
-                    
-                    if not outbound_flights or not return_flights:
+                    if not flights:
                         continue
                     
-                    # Combine best outbound and return flights
-                    for outbound in outbound_flights[:2]:  # Check top 2 options
-                        for return_flight in return_flights[:2]:
-                            deal = await self._process_round_trip_combination(
-                                route, outbound, return_flight, departure_date, return_date, stay_nights
-                            )
-                            if deal:
-                                deals_found.append(deal)
+                    # Process each flight found
+                    for flight in flights[:3]:  # Limit to top 3 results per date combination
+                        deal = await self._process_flight_deal(
+                            route, flight, departure_date, return_date, stay_nights
+                        )
+                        if deal:
+                            deals_found.append(deal)
+                            
+                    # Small delay to respect rate limits
+                    await asyncio.sleep(1)
                                 
                 except Exception as e:
                     logger.error(f"Error scanning {route.origin}-{route.destination}: {e}")
@@ -94,15 +101,18 @@ class FlightScanner:
             
         routes = query.all()
         
-        logger.info(f"Scanning {len(routes)} routes")
+        logger.info(f"Scanning {len(routes)} routes (strategic mode)")
         
         total_deals = []
-        for route in routes:
+        for i, route in enumerate(routes):
+            logger.info(f"Scanning route {i+1}/{len(routes)}: {route.origin} -> {route.destination}")
+            
             deals = await self.scan_route(route)
             total_deals.extend(deals)
             
-            # Small delay to avoid API rate limits
-            await asyncio.sleep(1)
+            # Strategic delay between routes to respect API limits
+            if i < len(routes) - 1:  # Don't delay after the last route
+                await asyncio.sleep(3)  # 3 seconds between routes
         
         return {
             "routes_scanned": len(routes),
@@ -214,19 +224,42 @@ class FlightScanner:
                     self.db.add(deal)
                     self.db.flush()
                     
-                    # Validate the deal using round-trip validator
+                    # 1. Validate the deal using round-trip validator
                     validation_result = self.round_trip_validator.validate_deal(deal, price_history, route)
                     
-                    # Only return deal if it passes validation
                     if validation_result["is_valid"]:
-                        logger.info(
-                            f"Valid round-trip deal! {route.origin}↔{route.destination} "
-                            f"€{total_price} (normal: €{normal_price}) "
-                            f"-{discount_pct:.0f}% | {stay_nights} nights"
+                        # 2. NEW: Cross-validate with dual API system (TravelPayouts + AviationStack)
+                        dual_validation = await self.dual_validator.validate_deal_comprehensive(
+                            route=route,
+                            deal_price=total_price,
+                            normal_price=normal_price,
+                            departure_date=departure_date,
+                            return_date=return_date
                         )
-                        return deal
+                        
+                        # Update confidence score based on dual validation
+                        if dual_validation["is_valid"]:
+                            # Use dual API confidence score
+                            deal.confidence_score = dual_validation["confidence_score"] * 100
+                            
+                            logger.info(
+                                f"✅ VALIDATED DEAL! {route.origin}↔{route.destination} "
+                                f"€{total_price} (normal: €{normal_price}) "
+                                f"-{discount_pct:.0f}% | {stay_nights} nights | "
+                                f"Confidence: {dual_validation['confidence_score']:.2f} | "
+                                f"TravelPayouts: {dual_validation['travelpayouts_validation'].get('validated', False)}"
+                            )
+                            return deal
+                        else:
+                            logger.warning(
+                                f"❌ Deal failed dual API validation: {route.origin}↔{route.destination} "
+                                f"€{total_price} | Reason: {dual_validation['recommendation']} | "
+                                f"Confidence: {dual_validation['confidence_score']:.2f}"
+                            )
+                            # Remove deal that failed cross-validation
+                            self.db.delete(deal)
                     else:
-                        logger.debug(f"Deal validation failed: {validation_result['validation_errors']}")
+                        logger.debug(f"Deal validation failed round-trip rules: {validation_result['validation_errors']}")
                         # Remove invalid deal
                         self.db.delete(deal)
                         
@@ -291,8 +324,8 @@ class FlightScanner:
         """Simulate flight pricing (replace with real API in production)"""
         import random
         
-        # Base price by route tier and region
-        base_price = self._calculate_base_round_trip_price(route, 7) / 2  # Half for one-way
+        # Base price by route tier and region for individual flight legs
+        base_price = self._calculate_base_round_trip_price(route, 7) / 2  # Individual leg price
         
         # Add randomness to simulate market fluctuations
         variation = random.uniform(0.7, 1.4)
@@ -303,3 +336,76 @@ class FlightScanner:
             price *= random.uniform(0.9, 1.1)
         
         return round(price, 2)
+    
+    async def _process_flight_deal(self, route: Route, flight: Dict, departure_date: datetime, 
+                                  return_date: datetime, stay_nights: int) -> Optional[Deal]:
+        """Process a flight from FlightLabs into a potential deal"""
+        try:
+            # Extract flight data
+            total_price = flight['price']
+            airline = flight['airline']
+            
+            # Create price history entry
+            price_history = PriceHistory(
+                route_id=route.id,
+                airline=airline,
+                price=total_price,
+                currency=flight.get('currency', 'EUR'),
+                departure_date=departure_date,
+                return_date=return_date,
+                flight_number=flight.get('flight_number', ''),
+                booking_class=flight.get('booking_class', 'economy'),
+                raw_data=flight
+            )
+            self.db.add(price_history)
+            self.db.flush()
+
+            # Check for anomaly (price drop)
+            is_anomaly, anomaly_score, normal_price = await self._check_anomaly(route, total_price)
+            
+            if is_anomaly and anomaly_score > 0.7:  # High confidence anomaly
+                # Calculate discount percentage
+                discount_percentage = ((normal_price - total_price) / normal_price) * 100
+                
+                if discount_percentage >= 30:  # Minimum 30% discount
+                    # Validate with TravelPayouts (dual validation)
+                    is_valid = await self.dual_validator.validate_deal(
+                        origin=route.origin,
+                        destination=route.destination,
+                        price=total_price,
+                        departure_date=departure_date,
+                        return_date=return_date
+                    )
+                    
+                    if is_valid:
+                        # Create deal
+                        deal = Deal(
+                            route_id=route.id,
+                            price_history_id=price_history.id,
+                            deal_price=total_price,
+                            normal_price=normal_price,
+                            discount_percentage=discount_percentage,
+                            confidence_score=anomaly_score,
+                            departure_date=departure_date,
+                            return_date=return_date,
+                            stay_duration_nights=stay_nights,
+                            advance_booking_days=(departure_date - datetime.now()).days,
+                            airline=airline,
+                            flight_details=flight.get('raw_data', {}),
+                            booking_url=flight.get('booking_url', ''),
+                            is_error_fare=discount_percentage >= 70,
+                            is_round_trip_valid=True,
+                            dual_api_validated=True
+                        )
+                        
+                        self.db.add(deal)
+                        logger.info(f"New deal found: {route.origin}->{route.destination} at €{total_price} (-{discount_percentage:.0f}%)")
+                        return deal
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error processing flight deal: {e}")
+            return None
+
+    # ...existing code...

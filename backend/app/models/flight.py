@@ -41,6 +41,7 @@ class Route(Base):
     )
     
     # Relationships
+    api_calls = relationship("ApiCall", back_populates="route")
     price_history = relationship("PriceHistory", back_populates="route")
     deals = relationship("Deal", back_populates="route")
 

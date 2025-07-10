@@ -2,6 +2,7 @@ import httpx
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import asyncio
+import time
 from app.core.config import settings
 from app.utils.logger import logger
 
@@ -11,6 +12,9 @@ class AviationStackAPI:
         self.api_key = settings.AVIATIONSTACK_API_KEY
         self.base_url = settings.AVIATIONSTACK_BASE_URL
         self.timeout = httpx.Timeout(30.0)
+        self.last_request_time = 0
+        self.min_request_interval = 1.5  # Minimum 1.5 seconds between requests
+        self.daily_limit = 100  # Free tier daily limit
         
     async def search_flights(
         self,
@@ -18,11 +22,14 @@ class AviationStackAPI:
         destination: str,
         departure_date: datetime,
         return_date: Optional[datetime] = None,
-        limit: int = 100
+        limit: int = 10  # Reduced limit to conserve API calls
     ) -> List[Dict[str, Any]]:
         """
-        Search flights between origin and destination
+        Search flights between origin and destination with rate limiting
         """
+        # Implement rate limiting
+        await self._enforce_rate_limit()
+        
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             params = {
                 "access_key": self.api_key,
@@ -37,6 +44,12 @@ class AviationStackAPI:
                     f"{self.base_url}/flights",
                     params=params
                 )
+                
+                if response.status_code == 429:
+                    logger.warning(f"Rate limit exceeded for {origin}-{destination}. Waiting...")
+                    await asyncio.sleep(60)  # Wait 1 minute before retrying
+                    return []
+                
                 response.raise_for_status()
                 data = response.json()
                 
@@ -50,6 +63,18 @@ class AviationStackAPI:
             except Exception as e:
                 logger.error(f"Unexpected error: {e}")
                 return []
+    
+    async def _enforce_rate_limit(self):
+        """Enforce rate limiting between API calls"""
+        current_time = time.time()
+        time_since_last_request = current_time - self.last_request_time
+        
+        if time_since_last_request < self.min_request_interval:
+            sleep_time = self.min_request_interval - time_since_last_request
+            logger.info(f"Rate limiting: sleeping for {sleep_time:.2f} seconds")
+            await asyncio.sleep(sleep_time)
+        
+        self.last_request_time = time.time()
     
     def _parse_flights(self, raw_flights: List[Dict]) -> List[Dict[str, Any]]:
         """Parse and normalize flight data"""

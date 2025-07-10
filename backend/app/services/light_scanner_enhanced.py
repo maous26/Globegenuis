@@ -18,9 +18,12 @@ class EnhancedFlightScanner:
     
     def __init__(self, db: Session):
         self.db = db
+        self.flightlabs_api = FlightLabsAPI()
+        self.travelpayouts_api = TravelPayoutsAPI()
         self.anomaly_detector = EnhancedAnomalyDetector()
-        self.flightlabs_key = settings.FLIGHTLABS_API_KEY if hasattr(settings, 'FLIGHTLABS_API_KEY') else None
-        self.travelpayouts_token = settings.TRAVELPAYOUTS_TOKEN if hasattr(settings, 'TRAVELPAYOUTS_TOKEN') else None
+        
+        # Configuration pour production
+        self.use_real_data = not settings.DEVELOPMENT_MODE
         
     async def scan_route(self, route: Route) -> List[Deal]:
         """Scan une route avec détection ML avancée"""
@@ -98,128 +101,47 @@ class EnhancedFlightScanner:
         destination: str, 
         departure_date: datetime
     ) -> List[Dict[str, Any]]:
-        """Récupérer les prix depuis plusieurs APIs"""
+        """Récupérer les prix depuis FlightLabs et TravelPayouts"""
         all_prices = []
         
-        # 1. FlightLabs API (si configurée)
-        if self.flightlabs_key:
-            flightlabs_prices = await self._fetch_flightlabs_prices(
-                origin, destination, departure_date
-            )
-            all_prices.extend(flightlabs_prices)
+        # 1. FlightLabs API (primary)
+        if self.use_real_data:
+            try:
+                flightlabs_prices = await self.flightlabs_api.search_flights(
+                    origin=origin,
+                    destination=destination,
+                    departure_date=departure_date,
+                    db=self.db  # Pass the database session
+                )
+                all_prices.extend(flightlabs_prices)
+                logger.info(f"FlightLabs returned {len(flightlabs_prices)} prices")
+            except Exception as e:
+                logger.error(f"FlightLabs error: {e}")
         
-        # 2. Travelpayouts API (si configurée)
-        if self.travelpayouts_token:
-            travelpayouts_prices = await self._fetch_travelpayouts_prices(
-                origin, destination, departure_date
-            )
-            all_prices.extend(travelpayouts_prices)
+        # 2. TravelPayouts API (backup/validation)
+        if self.use_real_data:
+            try:
+                travelpayouts_prices = await self.travelpayouts_api.search_flights(
+                    origin=origin,
+                    destination=destination,
+                    departure_date=departure_date
+                )
+                all_prices.extend(travelpayouts_prices)
+                logger.info(f"TravelPayouts returned {len(travelpayouts_prices)} prices")
+            except Exception as e:
+                logger.error(f"TravelPayouts error: {e}")
         
-        # 3. Si aucune API configurée, utiliser des données réalistes
-        if not all_prices:
-            logger.warning("No price APIs configured, using realistic simulation")
+        # 3. Si aucune donnée réelle ou en mode développement, utiliser simulation
+        if not all_prices or not self.use_real_data:
+            logger.info("Using realistic price simulation")
             all_prices = self._generate_realistic_prices(
                 origin, destination, departure_date
             )
         
         return all_prices
     
-    async def _fetch_flightlabs_prices(
-        self, 
-        origin: str, 
-        destination: str, 
-        departure_date: datetime
-    ) -> List[Dict[str, Any]]:
-        """Récupérer prix depuis FlightLabs"""
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
-                    "https://app.goflightlabs.com/search-best-flights",
-                    params={
-                        "access_key": self.flightlabs_key,
-                        "adults": 1,
-                        "origin": origin,
-                        "destination": destination,
-                        "departureDate": departure_date.strftime("%Y-%m-%d"),
-                        "currency": "EUR"
-                    }
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    return self._parse_flightlabs_response(data)
-                else:
-                    logger.error(f"FlightLabs API error: {response.status_code}")
-                    return []
-                    
-        except Exception as e:
-            logger.error(f"FlightLabs fetch error: {e}")
-            return []
-    
-    async def _fetch_travelpayouts_prices(
-        self, 
-        origin: str, 
-        destination: str, 
-        departure_date: datetime
-    ) -> List[Dict[str, Any]]:
-        """Récupérer prix depuis Travelpayouts"""
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
-                    "https://api.travelpayouts.com/aviasales/v3/prices_for_dates",
-                    params={
-                        "origin": origin,
-                        "destination": destination,
-                        "departure_at": departure_date.strftime("%Y-%m-%d"),
-                        "currency": "eur",
-                        "token": self.travelpayouts_token
-                    }
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    return self._parse_travelpayouts_response(data)
-                else:
-                    logger.error(f"Travelpayouts API error: {response.status_code}")
-                    return []
-                    
-        except Exception as e:
-            logger.error(f"Travelpayouts fetch error: {e}")
-            return []
-    
-    def _parse_flightlabs_response(self, data: Dict) -> List[Dict[str, Any]]:
-        """Parser la réponse FlightLabs"""
-        prices = []
-        
-        if data.get("success") and data.get("data"):
-            for flight in data["data"]:
-                prices.append({
-                    "airline": flight.get("airline", {}).get("name", "Unknown"),
-                    "price": float(flight.get("price", {}).get("total", 0)),
-                    "currency": flight.get("price", {}).get("currency", "EUR"),
-                    "flight_number": flight.get("segments", [{}])[0].get("flightNumber"),
-                    "booking_class": "economy",
-                    "source": "flightlabs"
-                })
-        
-        return prices
-    
-    def _parse_travelpayouts_response(self, data: Dict) -> List[Dict[str, Any]]:
-        """Parser la réponse Travelpayouts"""
-        prices = []
-        
-        if data.get("success") and data.get("data"):
-            for price_data in data["data"]:
-                prices.append({
-                    "airline": price_data.get("airline", "Unknown"),
-                    "price": float(price_data.get("price", 0)),
-                    "currency": "EUR",
-                    "flight_number": price_data.get("flight_number"),
-                    "booking_class": price_data.get("trip_class", "economy"),
-                    "source": "travelpayouts"
-                })
-        
-        return prices
+    # Remove old manual API fetch methods - now using dedicated API services
+    # _fetch_flightlabs_prices() and _fetch_travelpayouts_prices() replaced by API service classes
     
     async def _detect_anomaly_enhanced(
         self,

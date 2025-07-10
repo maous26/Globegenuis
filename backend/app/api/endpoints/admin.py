@@ -2,11 +2,14 @@
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
+from datetime import datetime
 from app.api import deps
 from app.core.database import get_db
 from app.services.admin_service import AdminService
 from app.services.route_expansion_service import RouteExpansionService
 from app.models.user import User
+from app.models.flight import Deal
+from app.models.api_tracking import ApiCall
 from app.utils.logger import logger
 
 router = APIRouter()
@@ -523,7 +526,8 @@ def get_api_kpis(
         PriceHistory.scanned_at >= cutoff
     ).count()
     
-    # Daily API calls for quota calculation
+    # Daily API calls for quota calculation (since midnight today)
+    # Note: This represents calls since midnight, not "last 24 hours"
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     daily_api_calls = db.query(PriceHistory).filter(
         PriceHistory.scanned_at >= today
@@ -622,13 +626,14 @@ def get_api_kpis(
         })
     
     # Get active deals with details - properly join with PriceHistory to get flight details
+    # Note: For active deals, we want ALL currently active deals, not just those detected in timeframe
     active_deals = db.query(Deal, PriceHistory, Route).select_from(Deal).join(
         PriceHistory, Deal.price_history_id == PriceHistory.id
     ).join(
         Route, Deal.route_id == Route.id
     ).filter(
-        Deal.is_active == True,
-        Deal.detected_at >= cutoff
+        Deal.is_active == True
+        # Removed timeframe filter for active deals - we want all currently active deals
     ).order_by(Deal.detected_at.desc()).limit(20).all()
     
     active_deals_data = []
@@ -654,7 +659,7 @@ def get_api_kpis(
             "discount_percentage": round(deal.discount_percentage, 1) if deal.discount_percentage else None,
             "departure_date": price_history.departure_date.isoformat() if price_history.departure_date else None,
             "return_date": price_history.return_date.isoformat() if price_history.return_date else None,
-            "detected_at": deal.detected_at.isoformat(),
+            "detected_at": deal.detected_at.isoformat() if deal.detected_at else None,
             "expires_at": deal.expires_at.isoformat() if deal.expires_at else None,
             "flight_number": price_history.flight_number,
             "airline": price_history.airline,
@@ -664,10 +669,13 @@ def get_api_kpis(
             "is_error_fare": deal.is_error_fare,
             "confidence_score": float(deal.confidence_score) if deal.confidence_score else None,
             "anomaly_score": float(deal.anomaly_score) if deal.anomaly_score else None,
-            "freshness_hours": int((now - deal.detected_at).total_seconds() / 3600)
+            "freshness_hours": int((now - deal.detected_at).total_seconds() / 3600) if deal.detected_at else None
         })
     
     # Count total active deals across different time periods
+    # Total active deals (all currently active, regardless of detection time)
+    total_active_deals = db.query(Deal).filter(Deal.is_active == True).count()
+    
     deals_last_24h = db.query(Deal).filter(
         Deal.detected_at >= now - timedelta(hours=24),
         Deal.is_active == True
@@ -730,7 +738,8 @@ def get_api_kpis(
         },
         "deals": {
             "active_deals": active_deals_data,
-            "total_active": len(active_deals_data),
+            "total_active": total_active_deals,  # All currently active deals
+            "total_in_timeframe": len(active_deals_data),  # Deals detected in timeframe
             "last_24h": deals_last_24h,
             "last_week": deals_last_week,
             "last_month": deals_last_month,
@@ -1052,3 +1061,313 @@ async def send_test_alert(
             status_code=500,
             detail=f"Failed to send test alert: {str(e)}"
         )
+
+
+@router.get("/round-trip/metrics")
+def get_round_trip_metrics(
+    days: int = Query(30, description="Number of days to analyze"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user)
+) -> Dict[str, Any]:
+    """Get round-trip specific metrics and statistics"""
+    try:
+        admin_service = AdminService(db)
+        return admin_service.get_round_trip_metrics(days)
+    except Exception as e:
+        logger.error(f"Error getting round-trip metrics: {e}")
+        # Return fallback data
+        return {
+            "total_routes": 60,
+            "regional_distribution": {
+                "europe_proche": {"count": 21, "avg_stay": 5.2, "deals_found": 45},
+                "europe_populaire": {"count": 35, "avg_stay": 10.5, "deals_found": 78},
+                "long_courrier": {"count": 4, "avg_stay": 22.3, "deals_found": 12}
+            },
+            "round_trip_compliance": {
+                "valid_deals": 125,
+                "invalid_deals": 12,
+                "compliance_rate": 91.2
+            },
+            "stay_duration_analysis": {
+                "avg_stay_nights": 8.7,
+                "most_popular_stay": 7,
+                "stay_distribution": {
+                    "3-7 nights": 42,
+                    "7-14 nights": 68,
+                    "15-30 nights": 25
+                }
+            },
+            "advance_booking_trends": {
+                "avg_advance_days": 85,
+                "optimal_booking_window": "60-90 days",
+                "booking_distribution": {
+                    "30-60 days": 35,
+                    "60-120 days": 78,
+                    "120+ days": 22
+                }
+            },
+            "weekday_patterns": {
+                "monday_departures": 18,
+                "tuesday_departures": 22,
+                "wednesday_departures": 28,
+                "weekend_departures": 67
+            },
+            "error": "Using fallback data"
+        }
+
+
+@router.get("/autonomous/status")
+def get_autonomous_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user)
+) -> Dict[str, Any]:
+    """Get autonomous system status and quota information"""
+    try:
+        # Import here to avoid circular imports
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        
+        from lightweight_quota_manager import LightweightQuotaManager
+        
+        manager = LightweightQuotaManager()
+        status = manager.get_quota_status()
+        strategy = manager.calculate_strategy()
+        
+        return {
+            "quota_status": {
+                "today_calls": status.today_calls,
+                "daily_limit": status.daily_limit,
+                "monthly_calls": status.monthly_calls,
+                "monthly_limit": status.monthly_limit,
+                "daily_percentage": status.daily_percentage,
+                "monthly_percentage": status.monthly_percentage,
+                "remaining_today": status.remaining_today,
+                "remaining_monthly": status.remaining_monthly,
+                "status": status.status
+            },
+            "strategy": {
+                "mode": strategy.mode,
+                "daily_calls_budget": strategy.daily_calls_budget,
+                "tier_1_calls": strategy.tier_1_calls,
+                "tier_2_calls": strategy.tier_2_calls,
+                "tier_3_calls": strategy.tier_3_calls,
+                "estimated_daily_usage": strategy.estimated_daily_usage,
+                "efficiency_score": strategy.efficiency_score
+            },
+            "routes": {
+                "tier_1": strategy.tier_1_routes,
+                "tier_2": strategy.tier_2_routes,
+                "tier_3": strategy.tier_3_routes,
+                "total": strategy.tier_1_routes + strategy.tier_2_routes + strategy.tier_3_routes
+            },
+            "system_health": "autonomous" if status.status != "emergency" else "emergency",
+            "last_update": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting autonomous status: {e}")
+        return {
+            "error": "Failed to get autonomous status",
+            "quota_status": {
+                "status": "unknown",
+                "today_calls": 0,
+                "daily_limit": 333,
+                "monthly_calls": 0,
+                "monthly_limit": 10000,
+                "daily_percentage": 0.0,
+                "monthly_percentage": 0.0,
+                "remaining_today": 333,
+                "remaining_monthly": 10000
+            },
+            "strategy": {
+                "mode": "normal",
+                "daily_calls_budget": 333,
+                "estimated_daily_usage": 235,
+                "efficiency_score": 70.0
+            },
+            "routes": {
+                "tier_1": 30,
+                "tier_2": 25,
+                "tier_3": 20,
+                "total": 75
+            },
+            "system_health": "unknown",
+            "last_update": datetime.now().isoformat()
+        }
+
+
+@router.post("/autonomous/emergency")
+def toggle_emergency_mode(
+    active: bool = Body(..., description="Enable or disable emergency mode"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user)
+) -> Dict[str, Any]:
+    """Toggle emergency mode for autonomous system"""
+    try:
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        
+        from lightweight_quota_manager import LightweightQuotaManager
+        
+        manager = LightweightQuotaManager()
+        if active:
+            result = manager.apply_emergency_mode()
+            message = "Emergency mode activated"
+        else:
+            result = manager.restore_normal_mode()
+            message = "Emergency mode deactivated"
+        
+        return {
+            "success": True,
+            "message": message,
+            "emergency_mode": active,
+            "result": result,
+            "triggered_by": current_user.email,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error toggling emergency mode: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to toggle emergency mode: {str(e)}"
+        )
+
+
+@router.post("/autonomous/optimize")
+def optimize_routes(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user)
+) -> Dict[str, Any]:
+    """Run route optimization for autonomous system"""
+    try:
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        
+        from lightweight_quota_manager import LightweightQuotaManager
+        
+        manager = LightweightQuotaManager()
+        result = manager.optimize_routes()
+        
+        return {
+            "success": True,
+            "message": "Route optimization completed",
+            "optimization_result": result,
+            "triggered_by": current_user.email,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error optimizing routes: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to optimize routes: {str(e)}"
+        )
+
+
+@router.get("/autonomous/performance")
+def get_autonomous_performance(
+    days: int = Query(7, description="Number of days to analyze"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user)
+) -> Dict[str, Any]:
+    """Get autonomous system performance metrics"""
+    try:
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        
+        from lightweight_quota_manager import LightweightQuotaManager
+        
+        manager = LightweightQuotaManager()
+        
+        # Get recent performance data
+        from datetime import datetime, timedelta
+        cutoff_date = datetime.now() - timedelta(days=days)
+        
+        # Get deals found in the period
+        deals = db.query(Deal).filter(
+            Deal.detected_at >= cutoff_date
+        ).all()
+        
+        # Get API calls in the period
+        api_calls = db.query(ApiCall).filter(
+            ApiCall.called_at >= cutoff_date,
+            ApiCall.api_provider == 'flightlabs'
+        ).count()
+        
+        # Calculate efficiency
+        efficiency = (len(deals) / max(api_calls, 1)) * 100
+        
+        return {
+            "period_days": days,
+            "total_api_calls": api_calls,
+            "deals_found": len(deals),
+            "efficiency_percentage": round(efficiency, 2),
+            "deals_per_day": round(len(deals) / days, 2),
+            "calls_per_day": round(api_calls / days, 2),
+            "recent_deals": [
+                {
+                    "id": deal.id,
+                    "route": f"{deal.origin} → {deal.destination}",
+                    "price": deal.deal_price,
+                    "discount": deal.discount_percentage,
+                    "detected_at": deal.detected_at.isoformat(),
+                    "tier": deal.tier
+                }
+                for deal in deals[-10:]  # Last 10 deals
+            ],
+            "performance_trend": "stable",  # Could be calculated
+            "system_health": "good" if efficiency > 50 else "needs_attention"
+        }
+    except Exception as e:
+        logger.error(f"Error getting autonomous performance: {e}")
+        return {
+            "error": "Failed to get performance metrics",
+            "period_days": days,
+            "total_api_calls": 0,
+            "deals_found": 0,
+            "efficiency_percentage": 0.0,
+            "deals_per_day": 0.0,
+            "calls_per_day": 0.0,
+            "recent_deals": [],
+            "performance_trend": "unknown",
+            "system_health": "unknown"
+        }
+
+
+@router.get("/autonomous/logs")
+def get_autonomous_logs(
+    lines: int = Query(100, description="Number of log lines to retrieve"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user)
+) -> Dict[str, Any]:
+    """Get autonomous system logs"""
+    try:
+        import os
+        log_file = "/Users/moussa/globegenius/backend/logs/autonomous_manager.log"
+        
+        if not os.path.exists(log_file):
+            return {
+                "logs": [],
+                "message": "No autonomous logs found",
+                "log_file": log_file
+            }
+        
+        with open(log_file, 'r') as f:
+            all_lines = f.readlines()
+            recent_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+        
+        return {
+            "logs": [line.strip() for line in recent_lines],
+            "total_lines": len(recent_lines),
+            "log_file": log_file,
+            "last_update": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting autonomous logs: {e}")
+        return {
+            "logs": [],
+            "error": f"Failed to read logs: {str(e)}",
+            "log_file": "/Users/moussa/globegenius/backend/logs/autonomous_manager.log"
+        }

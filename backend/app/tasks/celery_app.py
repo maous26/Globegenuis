@@ -23,30 +23,30 @@ app.conf.update(
     task_soft_time_limit=25 * 60,  # 25 minutes
 )
 
-# Configure periodic tasks
+# Configure periodic tasks - ULTRA CONSERVATIVE SCHEDULE (QUOTA OPTIMIZATION)
 app.conf.beat_schedule = {
-    # Tier 1 routes - every 2 hours
+    # Tier 1 routes - every 12 hours (2 scans/day) - REDUCED from 6 hours
     "scan-tier-1-routes": {
         "task": "app.tasks.flight_tasks.scan_tier_routes",
-        "schedule": crontab(minute=0, hour="*/2"),
+        "schedule": crontab(minute=0, hour="*/12"),  # Every 12 hours
         "args": (1,)
     },
-    # Tier 2 routes - every 4 hours
+    # Tier 2 routes - once daily (1 scan/day) - REDUCED from 8 hours  
     "scan-tier-2-routes": {
         "task": "app.tasks.flight_tasks.scan_tier_routes",
-        "schedule": crontab(minute=15, hour="*/4"),
+        "schedule": crontab(minute=15, hour="8"),  # Once daily at 8:15 AM
         "args": (2,)
     },
-    # Tier 3 routes - every 6 hours
+    # Tier 3 routes - once daily (1 scan/day) - REDUCED from 12 hours
     "scan-tier-3-routes": {
         "task": "app.tasks.flight_tasks.scan_tier_routes",
-        "schedule": crontab(minute=30, hour="*/6"),
+        "schedule": crontab(minute=30, hour="20"),  # Once daily at 8:30 PM
         "args": (3,)
     },
-    # Process and send alerts - every 30 minutes
+    # Process and send alerts - every 45 minutes (REDUCED frequency)
     "process-alerts": {
         "task": "app.tasks.email_tasks.process_pending_alerts",
-        "schedule": crontab(minute="*/30")
+        "schedule": crontab(minute="*/45")
     },
     # Clean expired deals - daily at 3 AM
     "clean-expired-deals": {

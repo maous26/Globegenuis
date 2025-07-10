@@ -367,3 +367,133 @@ class AdminService:
             'route': f"{route.origin} → {route.destination}",
             'updated_settings': settings
         }
+    
+    def get_round_trip_metrics(self, days: int = 30) -> Dict[str, Any]:
+        """Get round-trip specific metrics and analysis"""
+        
+        cutoff_date = datetime.now() - timedelta(days=days)
+        
+        # Regional distribution with round-trip data
+        regional_stats = self.db.query(
+            Route.region,
+            func.count(Route.id).label('route_count'),
+            func.avg(Route.min_stay_nights).label('avg_min_stay'),
+            func.avg(Route.max_stay_nights).label('avg_max_stay'),
+            func.count(Deal.id).label('deals_found')
+        ).outerjoin(Deal, and_(
+            Deal.route_id == Route.id,
+            Deal.detected_at >= cutoff_date
+        )).group_by(Route.region).all()
+        
+        regional_distribution = {}
+        for stat in regional_stats:
+            regional_distribution[stat.region or 'unknown'] = {
+                'count': stat.route_count,
+                'avg_min_stay': float(stat.avg_min_stay or 0),
+                'avg_max_stay': float(stat.avg_max_stay or 0),
+                'deals_found': stat.deals_found or 0
+            }
+        
+        # Round-trip compliance analysis
+        valid_deals = self.db.query(Deal).filter(
+            Deal.is_valid_round_trip == True,
+            Deal.detected_at >= cutoff_date
+        ).count()
+        
+        invalid_deals = self.db.query(Deal).filter(
+            Deal.is_valid_round_trip == False,
+            Deal.detected_at >= cutoff_date
+        ).count()
+        
+        total_deals = valid_deals + invalid_deals
+        compliance_rate = (valid_deals / total_deals * 100) if total_deals > 0 else 0
+        
+        # Stay duration analysis
+        stay_durations = self.db.query(Deal.stay_duration_nights).filter(
+            Deal.stay_duration_nights.isnot(None),
+            Deal.detected_at >= cutoff_date
+        ).all()
+        
+        if stay_durations:
+            stay_nights = [s[0] for s in stay_durations if s[0]]
+            avg_stay = sum(stay_nights) / len(stay_nights) if stay_nights else 0
+            
+            # Stay distribution
+            short_stays = len([s for s in stay_nights if 3 <= s <= 7])
+            medium_stays = len([s for s in stay_nights if 7 < s <= 14])
+            long_stays = len([s for s in stay_nights if s > 14])
+        else:
+            avg_stay = 0
+            short_stays = medium_stays = long_stays = 0
+        
+        # Advance booking analysis
+        advance_bookings = self.db.query(Deal.advance_booking_days).filter(
+            Deal.advance_booking_days.isnot(None),
+            Deal.detected_at >= cutoff_date
+        ).all()
+        
+        if advance_bookings:
+            booking_days = [b[0] for b in advance_bookings if b[0]]
+            avg_advance = sum(booking_days) / len(booking_days) if booking_days else 0
+            
+            # Booking distribution
+            short_advance = len([b for b in booking_days if 30 <= b < 60])
+            medium_advance = len([b for b in booking_days if 60 <= b <= 120])
+            long_advance = len([b for b in booking_days if b > 120])
+        else:
+            avg_advance = 0
+            short_advance = medium_advance = long_advance = 0
+        
+        # Weekday patterns
+        weekday_departures = self.db.query(
+            Deal.departure_day_of_week,
+            func.count(Deal.id).label('count')
+        ).filter(
+            Deal.departure_day_of_week.isnot(None),
+            Deal.detected_at >= cutoff_date
+        ).group_by(Deal.departure_day_of_week).all()
+        
+        weekday_stats = {}
+        for wd in weekday_departures:
+            weekday_names = {1: 'monday', 2: 'tuesday', 3: 'wednesday', 
+                           4: 'thursday', 5: 'friday', 6: 'saturday', 7: 'sunday'}
+            day_name = weekday_names.get(wd[0], f'day_{wd[0]}')
+            weekday_stats[f'{day_name}_departures'] = wd[1]
+        
+        # Route type distribution
+        route_types = self.db.query(
+            Route.route_type,
+            func.count(Route.id).label('count')
+        ).group_by(Route.route_type).all()
+        
+        route_type_stats = {rt[0] or 'unknown': rt[1] for rt in route_types}
+        
+        return {
+            'total_routes': self.db.query(Route).count(),
+            'round_trip_routes': route_type_stats.get('round_trip', 0),
+            'regional_distribution': regional_distribution,
+            'round_trip_compliance': {
+                'valid_deals': valid_deals,
+                'invalid_deals': invalid_deals,
+                'total_deals': total_deals,
+                'compliance_rate': round(compliance_rate, 2)
+            },
+            'stay_duration_analysis': {
+                'avg_stay_nights': round(avg_stay, 1),
+                'stay_distribution': {
+                    '3-7 nights (Europe proche)': short_stays,
+                    '7-14 nights (Europe populaire)': medium_stays,
+                    '15+ nights (Long courrier)': long_stays
+                }
+            },
+            'advance_booking_trends': {
+                'avg_advance_days': round(avg_advance, 1),
+                'booking_distribution': {
+                    '30-60 days': short_advance,
+                    '60-120 days': medium_advance,
+                    '120+ days': long_advance
+                }
+            },
+            'weekday_patterns': weekday_stats,
+            'route_type_distribution': route_type_stats
+        }

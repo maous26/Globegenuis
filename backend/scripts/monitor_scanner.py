@@ -235,7 +235,7 @@ class ScannerMonitor:
                 print(f"  {i}. {route.origin} → {route.destination} "
                       f"({tier_color}T{route.tier}{Fore.WHITE}): {Fore.GREEN}{route.deals_count} deals")
         else:
-            print(f"  {Fore.GRAY}Aucune route avec des deals récents")
+            print(f"  {Fore.LIGHTBLACK_EX}Aucune route avec des deals récents")
     
     def display_recent_alerts(self):
         """Afficher les dernières alertes"""
@@ -263,7 +263,7 @@ class ScannerMonitor:
                       f"({Fore.GREEN}-{deal.discount_percentage:.0f}%{Fore.WHITE}) "
                       f"il y a {Fore.CYAN}{time_str}")
         else:
-            print(f"  {Fore.GRAY}Aucune alerte récente")
+            print(f"  {Fore.LIGHTBLACK_EX}Aucune alerte récente")
 
 
 def main():

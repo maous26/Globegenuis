@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     AVIATIONSTACK_API_KEY: str = config("AVIATIONSTACK_API_KEY")
     AVIATIONSTACK_BASE_URL: str = config("AVIATIONSTACK_BASE_URL", default="https://api.aviationstack.com/v1")
     
+    # TravelPayouts API
+    TRAVELPAYOUTS_TOKEN: str = config("TRAVELPAYOUTS_TOKEN", default="")
+    
+    # FlightLabs API
+    FLIGHTLABS_API_KEY: str = config("FLIGHTLABS_API_KEY", default="")
+    
     # CORS
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
 
@@ -52,9 +58,15 @@ class Settings(BaseSettings):
         raise ValueError(v)
     
     # Flight Scanning Config
-    TIER1_SCAN_INTERVAL_HOURS: int = 2
-    TIER2_SCAN_INTERVAL_HOURS: int = 4
-    TIER3_SCAN_INTERVAL_HOURS: int = 6
+    TIER1_SCAN_INTERVAL_HOURS: int = 4  # 6 scans/day
+    TIER2_SCAN_INTERVAL_HOURS: int = 6  # 4 scans/day
+    TIER3_SCAN_INTERVAL_HOURS: int = 12  # 2 scans/day
+    
+    # Development Mode Config
+    DEVELOPMENT_MODE: bool = config("DEVELOPMENT_MODE", default=False, cast=bool)  # PRODUCTION MODE
+    USE_TRAVELPAYOUTS_PRIMARY: bool = config("USE_TRAVELPAYOUTS_PRIMARY", default=False, cast=bool)
+    USE_REAL_DATA: bool = config("USE_REAL_DATA", default=True, cast=bool)  # REAL DATA IN PRODUCTION
+    API_QUOTA_PROTECTION: bool = config("API_QUOTA_PROTECTION", default=True, cast=bool)
     
     # ML Config
     ANOMALY_THRESHOLD: float = 0.3

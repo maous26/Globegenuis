@@ -150,6 +150,11 @@ class AdminApiService {
     return this.makeRequest(`/api/kpis?timeframe=${timeframe}`);
   }
 
+  // Round-trip metrics
+  async getRoundTripMetrics(days = 30) {
+    return this.makeRequest(`/round-trip/metrics?days=${days}`);
+  }
+
   // Admin Settings
   async getAdminSettings() {
     return this.makeRequest('/settings');
@@ -173,6 +178,68 @@ class AdminApiService {
     return this.makeRequest('/test-alert', {
       method: 'POST',
     });
+  }
+
+  // Dual Validation Methods
+  async getDualValidationStatus() {
+    return this.makeRequest('/dual-validation/dual-validation/status');
+  }
+
+  async getDualValidationMetrics(days = 7) {
+    return this.makeRequest(`/dual-validation/dual-validation/metrics?days=${days}`);
+  }
+
+  async testTravelPayoutsConnection() {
+    return this.makeRequest('/dual-validation/dual-validation/travelpayouts-test', {
+      method: 'GET',
+    });
+  }
+
+  async testRouteValidation(origin, destination, price) {
+    return this.makeRequest(`/dual-validation/dual-validation/test-route?origin=${origin}&destination=${destination}&test_price=${price}`, {
+      method: 'POST',
+    });
+  }
+
+  async reValidateDeals() {
+    return this.makeRequest('/dual-validation/dual-validation/re-validate-deals', {
+      method: 'POST',
+    });
+  }
+
+  async setEmergencyMode(active) {
+    return this.makeRequest('/dual-validation/dual-validation/emergency-mode', {
+      method: 'POST',
+      body: JSON.stringify({
+        active: active
+      }),
+    });
+  }
+
+  // Autonomous System Methods
+  async getAutonomousStatus() {
+    return this.makeRequest('/autonomous/status');
+  }
+
+  async toggleEmergencyMode(active) {
+    return this.makeRequest('/autonomous/emergency', {
+      method: 'POST',
+      body: JSON.stringify(active),
+    });
+  }
+
+  async optimizeRoutes() {
+    return this.makeRequest('/autonomous/optimize', {
+      method: 'POST',
+    });
+  }
+
+  async getAutonomousPerformance(days = 7) {
+    return this.makeRequest(`/autonomous/performance?days=${days}`);
+  }
+
+  async getAutonomousLogs(lines = 100) {
+    return this.makeRequest(`/autonomous/logs?lines=${lines}`);
   }
 }
 

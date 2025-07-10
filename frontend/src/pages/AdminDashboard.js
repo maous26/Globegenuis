@@ -4,23 +4,19 @@ import AdminApiService from '../services/adminApi';
 import { 
   Users, 
   User,
-  Plane, 
   DollarSign, 
-  Bell, 
   Activity, 
-  TrendingUp,
   Settings,
   Eye,
   BarChart3,
   MapPin,
-  Clock,
   AlertTriangle,
   CheckCircle,
   XCircle,
   Zap,
   Plus,
   Network,
-  Globe
+  Bot
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -36,6 +32,7 @@ import {
 } from 'chart.js';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import toast from 'react-hot-toast';
+import AutonomousSystemTab from '../components/AutonomousSystemTab';
 
 // Register ChartJS components
 ChartJS.register(
@@ -323,6 +320,7 @@ const AdminDashboard = () => {
               { id: 'overview', name: 'Overview', icon: BarChart3 },
               { id: 'routes', name: 'Route Monitoring', icon: MapPin },
               { id: 'expansion', name: 'Route Expansion', icon: Network },
+              { id: 'autonomous', name: 'Autonomous System', icon: Bot },
               { id: 'api-kpis', name: 'API KPIs', icon: Zap },
               { id: 'seasonal', name: 'Seasonal Strategy', icon: Activity },
               { id: 'users', name: 'User Analytics', icon: Users },
@@ -371,6 +369,11 @@ const AdminDashboard = () => {
             onLoadData={loadExpansionData}
             onSmartExpansion={handleSmartExpansion}
             onPreviewExpansion={handlePreviewExpansion}
+          />
+        )}
+        {activeTab === 'autonomous' && (
+          <AutonomousSystemTab 
+            adminApi={adminApi}
           />
         )}
         {activeTab === 'api-kpis' && (
